@@ -2,22 +2,22 @@
 -- date : 11 April 2024
 -- version: 1.2.0
 
-local re = re
-local sdk = sdk
-
 -- CONFIG:
-local MAX_ALTITUDE = 6 
-local LEVITATE_DURATION = 10 
+local MAX_ALTITUDE = 6
+local LEVITATE_DURATION = 10
 local FLY_SPEED_MULTIPLIER = 2
-local LEVITATE_STAMINA_MULTIPLIER = 0.0005 
+local LEVITATE_STAMINA_MULTIPLIER = 0.0005
 local ASCEND_STAMINA_MULTIPLIER = 3
 local RE_LEVITATE_INTERVAL = 1.0
 local DISABLE_STAMINA_COST = false
 
+local re = re
+local sdk = sdk
+
 local _characterManager
 local function GetCharacterManager()
-    if not _characterManager then 
-        _characterManager = sdk.get_managed_singleton("app.CharacterManager") 
+    if not _characterManager then
+        _characterManager = sdk.get_managed_singleton("app.CharacterManager")
     end
 	return _characterManager
 end
@@ -50,6 +50,12 @@ local function GetStaminaManager()
         local manualPlayer = GetManualPlayer()
         if manualPlayer then
             _staminaManager = manualPlayer:get_StaminaManager()
+            if not _staminaManager then
+                local temp_player_ = sdk.get_managed_singleton("app.CharacterManager"):get_ManualPlayer()
+                if temp_player_ then
+                    _staminaManager = temp_player_:get_StaminaManager()
+                end
+                end
         end
     end
     return _staminaManager
@@ -68,25 +74,11 @@ local _humanCommonActionCtrl
 local function GetHumanCommonActionCtrl()
     local manualPlayerHuman = GetManualPlayerHuman()
     if manualPlayerHuman then
-        if _humanCommonActionCtrl == nil then 
+        if _humanCommonActionCtrl == nil then
             _humanCommonActionCtrl = manualPlayerHuman:get_HumanCommonActionCtrl()
         end
     end
     return _humanCommonActionCtrl
-end
-
-local isInitialized = false
-function initializeLevitateParam()
-    if isInitialized then return end 
-    local levitateCtrl = GetLevitateController();
-    if levitateCtrl then
-        local leviParams = levitateCtrl:get_field("Param")
-        if leviParams then
-            leviParams:set_field("MaxHeight", MAX_ALTITUDE)
-            leviParams:set_field("MaxKeepSec", LEVITATE_DURATION)
-            isInitialized = true
-        end
-    end
 end
 
 local function injectOptFlySpeed(manualPlayerHuman, levitateCtrl)
@@ -111,46 +103,79 @@ local function expendStaminaTolevitate(levitateCtrl, staminaManager, isDisabled)
     local max_stamina = staminaManager:get_MaxValue()
     local cost = max_stamina * LEVITATE_STAMINA_MULTIPLIER * -1.0
     local remains = staminaManager:get_RemainingAmount()
-    if remains <= 0.0  then 
-        levitateCtrl:set_field("<IsActive>k__BackingField", false) 
+    if remains <= 0.0  then
+        levitateCtrl:set_field("<IsActive>k__BackingField", false)
     end
     if levitateCtrl:get_IsRise() then
         staminaManager:add(cost * ASCEND_STAMINA_MULTIPLIER, false)
-    else   
+    else
         staminaManager:add(cost, false)
     end
 end
 
-function resetScript()
+local function dummy_hook()
+end
+
+local function wrapped_init()
+end
+
+local function get_levitate_param_obj()
+    local _levitate_ctrl = GetLevitateController()
+    local _levitate_param
+        if  _levitate_ctrl then
+            _levitate_param = _levitate_ctrl:get_field("Param")
+        end
+    return _levitate_param
+end
+
+local function set_levitate_param_inner(param)
+    param:set_field("MaxHeight", MAX_ALTITUDE)
+    param:set_field("MaxKeepSec", LEVITATE_DURATION)
+end
+
+local function init_levitate_param()
+    local _levitate_param = get_levitate_param_obj()
+    if _levitate_param then
+        set_levitate_param_inner(_levitate_param)
+        wrapped_init = function ()
+            return dummy_hook()
+        end
+    end
+end
+
+function ResetScript(...)
     _characterManager = nil
     _manualPlayerHuman = nil
     _levitateController = nil
     _humanCommonActionCtrl = nil
     _manualPlayerHuman = nil
     _staminaManager = nil
-    isInitialized = false
-    initializeLevitateParam()
+    wrapped_init = function ()
+        return init_levitate_param()
+    end
+    return ...
 end
 
-local function processDeath(characterManager)
-    if not characterManager then return end
-    if not characterManager:get_IsManualPlayerDead() then return end
-    resetScript()
+wrapped_init = function ()
+    return init_levitate_param()
 end
 
-re.on_script_reset(function ()
-    initializeLevitateParam()
-end)
+sdk.hook(sdk.find_type_definition("app.Player"):get_method(".ctor"), dummy_hook, ResetScript)
+
+
+sdk.hook(sdk.find_type_definition("app.LevitateController"):get_method("get_IsRise"),
+    dummy_hook,
+    function (...)
+        wrapped_init()
+        return ...
+    end)
 
 re.on_frame(function ()
     local levitateCtrl = GetLevitateController()
     local humanCommonActionCtrl = GetHumanCommonActionCtrl()
-    local characterManager = GetCharacterManager()
     local manualPlayerHuman = GetManualPlayerHuman()
     local staminaManager = GetStaminaManager()
-    initializeLevitateParam()
     injectOptFlySpeed(manualPlayerHuman, levitateCtrl)
     expendStaminaTolevitate(levitateCtrl, staminaManager, DISABLE_STAMINA_COST)
     activateReLevitate(humanCommonActionCtrl, levitateCtrl)
-    processDeath(characterManager)
 end)
