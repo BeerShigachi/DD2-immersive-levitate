@@ -55,7 +55,7 @@ local function GetStaminaManager()
                 if temp_player_ then
                     _staminaManager = temp_player_:get_StaminaManager()
                 end
-                end
+            end
         end
     end
     return _staminaManager
