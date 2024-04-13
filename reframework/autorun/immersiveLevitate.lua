@@ -1,6 +1,6 @@
 -- author : BeerShigachi
--- date : 11 April 2024
--- version: 1.2.0
+-- date : 13 April 2024
+-- version: 1.3.0
 
 -- CONFIG:
 local MAX_ALTITUDE = 6
@@ -8,8 +8,12 @@ local LEVITATE_DURATION = 10
 local FLY_SPEED_MULTIPLIER = 2
 local LEVITATE_STAMINA_MULTIPLIER = 0.0005
 local ASCEND_STAMINA_MULTIPLIER = 3
-local RE_LEVITATE_INTERVAL = 1.0
+local RE_LEVITATE_INTERVAL = 0.25
 local DISABLE_STAMINA_COST = false
+
+if RE_LEVITATE_INTERVAL > LEVITATE_DURATION then
+    RE_LEVITATE_INTERVAL = LEVITATE_DURATION
+end
 
 local re = re
 local sdk = sdk
