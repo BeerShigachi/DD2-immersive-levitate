@@ -10,12 +10,14 @@ local LEVITATE_STAMINA_MULTIPLIER = 0.0005
 local ASCEND_STAMINA_MULTIPLIER = 3.0
 local RE_LEVITATE_INTERVAL = 10.0
 local DISABLE_STAMINA_COST = false
-local FALL_DEACCELERATE = 300.0
+local FALL_DEACCELERATE = 1000.0
 
 if RE_LEVITATE_INTERVAL > LEVITATE_DURATION then
     RE_LEVITATE_INTERVAL = LEVITATE_DURATION
 end
 
+local FRAME_HIGH_FALL = 500.0
+local CALLCEL_FALL_THRESHOLD = 500.0
 local re = re
 local sdk = sdk
 
@@ -47,6 +49,41 @@ local function GetManualPlayer()
         end
     end
     return _manualPlayer
+end
+
+local _human_param
+local function GetHumanParam()
+    if not _human_param then
+        local characterManager = GetCharacterManager()
+        if characterManager then
+            _human_param = characterManager:get_HumanParam()
+        end
+    end
+    return _human_param
+end
+
+local _human_action_param
+local function GetHumanActionParam()
+    if not _human_action_param then
+        local human_param = GetHumanParam()
+        print("human param", human_param)
+        if human_param then
+            _human_action_param = human_param:get_Action()
+        end
+    end
+    return _human_action_param
+end
+
+local _fall_param
+local function GetFallParam()
+    if not _fall_param then
+        local human_action_param = GetHumanActionParam()
+        print('human action param', human_action_param)
+        if human_action_param then
+            _fall_param = human_action_param:get_FallParamProp()
+        end
+    end
+    return _fall_param
 end
 
 local _staminaManager
@@ -118,6 +155,16 @@ local function expendStaminaTolevitate(levitateCtrl, staminaManager, isDisabled)
     end
 end
 
+local function update_fall_param()
+    local fall_param = GetFallParam()
+    print("fall_param", fall_param)
+    if fall_param then
+        fall_param:set_field("InterpFrameHighFall", FRAME_HIGH_FALL)
+        fall_param:set_field("FrameEnableCancel", CALLCEL_FALL_THRESHOLD)
+
+    end
+end
+
 local function dummy_hook()
 end
 
@@ -149,26 +196,31 @@ local function init_levitate_param()
     end
 end
 
-function ResetScript(...)
+function init_()
     _characterManager = nil
     _manualPlayerHuman = nil
     _levitateController = nil
     _humanCommonActionCtrl = nil
-    _manualPlayerHuman = nil
+    _manualPlayer = nil
     _staminaManager = nil
     wrapped_init = function ()
         return init_levitate_param()
     end
-    return ...
+    update_fall_param()
 end
 
 wrapped_init = function ()
     return init_levitate_param()
 end
 
--- levitateController.Parameter.FallDeccel set higher to prevent lose balance.
-
-sdk.hook(sdk.find_type_definition("app.Player"):get_method(".ctor"), dummy_hook, ResetScript)
+sdk.hook(
+    sdk.find_type_definition("app.GuiManager"):get_method("OnChangeSceneType"),
+    function() end,
+    function(rtval)
+        init_()
+        return rtval
+    end
+)
 
 -- try app.LevitateController.Parameter..ctor()
 sdk.hook(sdk.find_type_definition("app.LevitateController"):get_method("get_IsRise"),
