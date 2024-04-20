@@ -123,39 +123,45 @@ local function GetHumanCommonActionCtrl()
     return _humanCommonActionCtrl
 end
 
-local function injectOptFlySpeed(manualPlayerHuman, levitateCtrl)
-    if not manualPlayerHuman or not levitateCtrl then return end
-    local defaultFlyingSpeed = manualPlayerHuman:get_field("MoveSpeedTypeValueInternal")
+local function updateOptFlySpeed()
+    if not _manualPlayerHuman then _manualPlayerHuman = GetManualPlayerHuman() end
+    if not _levitateController then _levitateController = GetLevitateController() end
+    if not _manualPlayerHuman or not _levitateController then return end
+    local defaultFlyingSpeed = _manualPlayerHuman:get_field("MoveSpeedTypeValueInternal")
     if defaultFlyingSpeed < 0 then return end
-    levitateCtrl:set_field("HorizontalSpeed", defaultFlyingSpeed * FLY_SPEED_MULTIPLIER)
+    _levitateController:set_field("HorizontalSpeed", defaultFlyingSpeed * FLY_SPEED_MULTIPLIER)
 end
 
-local function activateReLevitate(humanCommonActionCtrl, levitateCtrl)
+local function activateReLevitate()
     if RE_LEVITATE_INTERVAL > LEVITATE_DURATION then return end
-    if not levitateCtrl or not humanCommonActionCtrl then return end
-    local timer = levitateCtrl:get_field("TotalTimer")
-    if timer < RE_LEVITATE_INTERVAL and levitateCtrl:get_IsActive() then return end
-    humanCommonActionCtrl:set_field("<IsEnableLevitate>k__BackingField", true)
+    if not _levitateController then _levitateController = GetLevitateController() end
+    if not _humanCommonActionCtrl then _humanCommonActionCtrl = GetHumanCommonActionCtrl() end
+    if not _levitateController or not _humanCommonActionCtrl then return end
+    local timer = _levitateController:get_field("TotalTimer")
+    if timer < RE_LEVITATE_INTERVAL and _levitateController:get_IsActive() then return end
+    _humanCommonActionCtrl:set_field("<IsEnableLevitate>k__BackingField", true)
 end
 
-local function expendStaminaTolevitate(levitateCtrl, staminaManager, isDisabled)
-    if isDisabled then return end
-    if not levitateCtrl or not staminaManager then return end
-    if not levitateCtrl:get_IsActive() then return end
-    local max_stamina = staminaManager:get_MaxValue()
+local function expendStaminaTolevitate()
+    if DISABLE_STAMINA_COST then return end
+    if not _levitateController then _levitateController = GetLevitateController() end
+    if not _staminaManager then _staminaManager = GetStaminaManager() end
+    if not _levitateController or not _staminaManager then return end
+    if not _levitateController:get_IsActive() then return end
+    local max_stamina = _staminaManager:get_MaxValue()
     local cost = max_stamina * LEVITATE_STAMINA_MULTIPLIER * -1.0
-    local remains = staminaManager:get_RemainingAmount()
+    local remains = _staminaManager:get_RemainingAmount()
     if remains <= 0.0  then
-        levitateCtrl:set_field("<IsActive>k__BackingField", false)
+        _levitateController:set_field("<IsActive>k__BackingField", false)
     end
-    if levitateCtrl:get_IsRise() then
-        staminaManager:add(cost * ASCEND_STAMINA_MULTIPLIER, false)
+    if _levitateController:get_IsRise() then
+        _staminaManager:add(cost * ASCEND_STAMINA_MULTIPLIER, false)
     else
-        staminaManager:add(cost, false)
+        _staminaManager:add(cost, false)
     end
 end
 
-local function update_fall_param()
+local function set_fall_param()
     local fall_param = GetFallParam()
     print("fall_param", fall_param)
     if fall_param then
@@ -196,7 +202,7 @@ local function init_levitate_param()
     end
 end
 
-function init_()
+local function init_()
     _characterManager = nil
     _manualPlayerHuman = nil
     _levitateController = nil
@@ -206,7 +212,7 @@ function init_()
     wrapped_init = function ()
         return init_levitate_param()
     end
-    update_fall_param()
+    set_fall_param()
 end
 
 wrapped_init = function ()
@@ -231,11 +237,7 @@ sdk.hook(sdk.find_type_definition("app.LevitateController"):get_method("get_IsRi
     end)
 
 re.on_frame(function ()
-    local levitateCtrl = GetLevitateController()
-    local humanCommonActionCtrl = GetHumanCommonActionCtrl()
-    local manualPlayerHuman = GetManualPlayerHuman()
-    local staminaManager = GetStaminaManager()
-    injectOptFlySpeed(manualPlayerHuman, levitateCtrl)
-    expendStaminaTolevitate(levitateCtrl, staminaManager, DISABLE_STAMINA_COST)
-    activateReLevitate(humanCommonActionCtrl, levitateCtrl)
+    updateOptFlySpeed()
+    expendStaminaTolevitate()
+    activateReLevitate()
 end)
