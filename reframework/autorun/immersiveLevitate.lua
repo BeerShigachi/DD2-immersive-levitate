@@ -3,13 +3,14 @@
 -- version: 1.3.0
 
 -- CONFIG:
-local MAX_ALTITUDE = 6
-local LEVITATE_DURATION = 10
-local FLY_SPEED_MULTIPLIER = 2
+local MAX_ALTITUDE = 6.0
+local LEVITATE_DURATION = 10.0
+local FLY_SPEED_MULTIPLIER = 2.0
 local LEVITATE_STAMINA_MULTIPLIER = 0.0005
-local ASCEND_STAMINA_MULTIPLIER = 3
-local RE_LEVITATE_INTERVAL = 0.25
+local ASCEND_STAMINA_MULTIPLIER = 3.0
+local RE_LEVITATE_INTERVAL = 10.0
 local DISABLE_STAMINA_COST = false
+local FALL_DEACCELERATE = 300.0
 
 if RE_LEVITATE_INTERVAL > LEVITATE_DURATION then
     RE_LEVITATE_INTERVAL = LEVITATE_DURATION
@@ -126,15 +127,16 @@ end
 local function get_levitate_param_obj()
     local _levitate_ctrl = GetLevitateController()
     local _levitate_param
-        if  _levitate_ctrl then
-            _levitate_param = _levitate_ctrl:get_field("Param")
-        end
+    if  _levitate_ctrl then
+        _levitate_param = _levitate_ctrl:get_field("Param")
+    end
     return _levitate_param
 end
 
 local function set_levitate_param_inner(param)
     param:set_field("MaxHeight", MAX_ALTITUDE)
     param:set_field("MaxKeepSec", LEVITATE_DURATION)
+    param:set_field("FallDeccel", FALL_DEACCELERATE)
 end
 
 local function init_levitate_param()
@@ -164,9 +166,11 @@ wrapped_init = function ()
     return init_levitate_param()
 end
 
+-- levitateController.Parameter.FallDeccel set higher to prevent lose balance.
+
 sdk.hook(sdk.find_type_definition("app.Player"):get_method(".ctor"), dummy_hook, ResetScript)
 
-
+-- try app.LevitateController.Parameter..ctor()
 sdk.hook(sdk.find_type_definition("app.LevitateController"):get_method("get_IsRise"),
     dummy_hook,
     function (...)
