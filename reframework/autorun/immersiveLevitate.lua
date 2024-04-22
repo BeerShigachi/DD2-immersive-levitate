@@ -1,6 +1,6 @@
 -- author : BeerShigachi
--- date : 13 April 2024
--- version: 1.3.0
+-- date : 22 April 2024
+-- version: 2.0.1
 
 -- CONFIG:
 local MAX_ALTITUDE = 6.0
@@ -16,8 +16,8 @@ if RE_LEVITATE_INTERVAL > LEVITATE_DURATION then
     RE_LEVITATE_INTERVAL = LEVITATE_DURATION
 end
 
-local FRAME_HIGH_FALL = 500.0
-local CALLCEL_FALL_THRESHOLD = 500.0
+local START_FALL_ANIMATION_FRAME_COUNT = 500.0
+local CANCEL_FALL_FRAME_COUNT = 500.0
 local re = re
 local sdk = sdk
 
@@ -165,8 +165,8 @@ local function set_fall_param()
     local fall_param = GetFallParam()
     print("fall_param", fall_param)
     if fall_param then
-        fall_param:set_field("InterpFrameHighFall", FRAME_HIGH_FALL)
-        fall_param:set_field("FrameEnableCancel", CALLCEL_FALL_THRESHOLD)
+        fall_param:set_field("InterpFrameHighFall", START_FALL_ANIMATION_FRAME_COUNT)
+        fall_param:set_field("FrameEnableCancel", CANCEL_FALL_FRAME_COUNT)
 
     end
 end
