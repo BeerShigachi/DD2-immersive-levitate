@@ -1,6 +1,6 @@
 -- author : BeerShigachi
 -- date : 22 April 2024
--- version: 2.0.1
+-- version: 2.1.1
 
 -- CONFIG:
 local MAX_ALTITUDE = 6.0
@@ -10,14 +10,14 @@ local LEVITATE_STAMINA_MULTIPLIER = 0.0005
 local ASCEND_STAMINA_MULTIPLIER = 3.0
 local RE_LEVITATE_INTERVAL = 10.0
 local DISABLE_STAMINA_COST = false
-local FALL_DEACCELERATE = 1000.0
+local FALL_DEACCELERATE = 2000.0
+local START_FALL_ANIMATION_FRAME_COUNT = 500.0
 
 if RE_LEVITATE_INTERVAL > LEVITATE_DURATION then
     RE_LEVITATE_INTERVAL = LEVITATE_DURATION
 end
 
-local START_FALL_ANIMATION_FRAME_COUNT = 500.0
-local CANCEL_FALL_FRAME_COUNT = 500.0
+
 local re = re
 local sdk = sdk
 
@@ -40,15 +40,26 @@ local function GetManualPlayerHuman()
     return _manualPlayerHuman
 end
 
-local _manualPlayer
-local function GetManualPlayer()
-    if not _manualPlayer then
+local _player
+local function GetManualPlayerPlayer()
+    if not _player then
         local characterManager = GetCharacterManager()
         if characterManager then
-            _manualPlayer = characterManager:get_ManualPlayer()
+            _player = characterManager:get_ManualPlayerPlayer()
         end
     end
-    return _manualPlayer
+    return _player
+end
+
+local _player_chara
+local function GetManualPlayer()
+    if not _player_chara then
+        local characterManager = GetCharacterManager()
+        if characterManager then
+            _player_chara = characterManager:get_ManualPlayer()
+        end
+    end
+    return _player_chara
 end
 
 local _human_param
@@ -66,7 +77,6 @@ local _human_action_param
 local function GetHumanActionParam()
     if not _human_action_param then
         local human_param = GetHumanParam()
-        print("human param", human_param)
         if human_param then
             _human_action_param = human_param:get_Action()
         end
@@ -78,12 +88,44 @@ local _fall_param
 local function GetFallParam()
     if not _fall_param then
         local human_action_param = GetHumanActionParam()
-        print('human action param', human_action_param)
         if human_action_param then
             _fall_param = human_action_param:get_FallParamProp()
         end
     end
     return _fall_param
+end
+
+local _free_fall_controller
+local function GetFreeFallController()
+    if not _free_fall_controller then
+        local player_chara = GetManualPlayer()
+        if player_chara then
+            _free_fall_controller = player_chara:get_FreeFallCtrl()
+        end
+    end
+    return _free_fall_controller
+end
+
+local _player_input_processor
+local function GetPlayerInputProcessor()
+    if not _player_input_processor then
+        local player = GetManualPlayerPlayer()
+        if player then
+            _player_input_processor = player:get_field("InputProcessor")
+        end
+    end
+    return _player_input_processor
+end
+
+local _player_track
+local function GetPlayerTrack()
+    if not _player_track then
+        local player_input = GetPlayerInputProcessor()
+        if player_input then
+            _player_track = player_input:get_field("<PlayerTrack>k__BackingField")
+        end
+    end
+    return _player_track
 end
 
 local _staminaManager
@@ -161,13 +203,21 @@ local function expendStaminaTolevitate()
     end
 end
 
+local function updateEvasionFlag()
+    if not _player_track then _player_track = GetPlayerTrack() end
+    if not _free_fall_controller then _free_fall_controller = GetFreeFallController() end
+    if _player_track and _free_fall_controller then
+        if _free_fall_controller:get_IsActive() then
+            _player_track:set_field("Evasion", true)
+            _player_track:set_field("EvasionBuffer", true)
+        end
+    end
+end
+
 local function set_fall_param()
     local fall_param = GetFallParam()
-    print("fall_param", fall_param)
     if fall_param then
         fall_param:set_field("InterpFrameHighFall", START_FALL_ANIMATION_FRAME_COUNT)
-        fall_param:set_field("FrameEnableCancel", CANCEL_FALL_FRAME_COUNT)
-
     end
 end
 
@@ -204,10 +254,14 @@ end
 
 local function init_()
     _characterManager = nil
+    _player = nil
+    _player_input_processor = nil
+    _player_track = nil
+    _free_fall_controller = nil
     _manualPlayerHuman = nil
     _levitateController = nil
     _humanCommonActionCtrl = nil
-    _manualPlayer = nil
+    _player_chara = nil
     _staminaManager = nil
     wrapped_init = function ()
         return init_levitate_param()
@@ -219,6 +273,8 @@ wrapped_init = function ()
     return init_levitate_param()
 end
 
+init_()
+
 sdk.hook(
     sdk.find_type_definition("app.GuiManager"):get_method("OnChangeSceneType"),
     function() end,
@@ -228,7 +284,6 @@ sdk.hook(
     end
 )
 
--- try app.LevitateController.Parameter..ctor()
 sdk.hook(sdk.find_type_definition("app.LevitateController"):get_method("get_IsRise"),
     dummy_hook,
     function (...)
@@ -240,4 +295,5 @@ re.on_frame(function ()
     updateOptFlySpeed()
     expendStaminaTolevitate()
     activateReLevitate()
+    updateEvasionFlag()
 end)
