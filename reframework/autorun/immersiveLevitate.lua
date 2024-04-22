@@ -1,6 +1,6 @@
 -- author : BeerShigachi
 -- date : 22 April 2024
--- version: 2.1.1
+-- version: 2.1.2
 
 -- CONFIG:
 local MAX_ALTITUDE = 6.0
@@ -20,6 +20,14 @@ end
 
 local re = re
 local sdk = sdk
+
+local _pause_manager
+local function GetPauseManager()
+    if not _pause_manager then
+        _pause_manager = sdk.get_managed_singleton("app.PauseManager")
+    end
+    return _pause_manager
+end
 
 local _characterManager
 local function GetCharacterManager()
@@ -186,6 +194,8 @@ end
 
 local function expendStaminaTolevitate()
     if DISABLE_STAMINA_COST then return end
+    if not _pause_manager then _pause_manager = GetPauseManager() end
+    if _pause_manager:isPausedAny() then return end
     if not _levitateController then _levitateController = GetLevitateController() end
     if not _staminaManager then _staminaManager = GetStaminaManager() end
     if not _levitateController or not _staminaManager then return end
@@ -253,6 +263,7 @@ local function init_levitate_param()
 end
 
 local function init_()
+    _pause_manager = nil
     _characterManager = nil
     _player = nil
     _player_input_processor = nil
