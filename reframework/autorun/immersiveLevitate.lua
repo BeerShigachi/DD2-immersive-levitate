@@ -1,6 +1,6 @@
 -- author : BeerShigachi
--- date : 22 April 2024
--- version: 2.1.2
+-- date : 23 April 2024
+-- version: 2.1.3
 
 -- CONFIG:
 local MAX_ALTITUDE = 6.0
@@ -295,7 +295,7 @@ sdk.hook(
     end
 )
 
-sdk.hook(sdk.find_type_definition("app.LevitateController"):get_method("get_IsRise"),
+sdk.hook(sdk.find_type_definition("app.LevitateController"):get_method("setParameter(app.LevitateController.Parameter)"),
     dummy_hook,
     function (...)
         wrapped_init()
