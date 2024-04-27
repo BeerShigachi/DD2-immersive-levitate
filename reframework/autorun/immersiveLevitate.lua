@@ -1,6 +1,6 @@
 -- author : BeerShigachi
 -- date : 27 April 2024
--- version: 3.0.0
+-- version: 3.0.1
 
 -- CONFIG:
 local MAX_ALTITUDE = 6.0
@@ -216,12 +216,16 @@ local function expendStaminaTolevitate()
 end
 
 local function updateEvasionFlag()
-    if not _player_track then _player_track = GetPlayerTrack() end
-    if not _free_fall_controller then _free_fall_controller = GetFreeFallController() end
-    if _player_track and _free_fall_controller then
-        if _free_fall_controller:get_IsActive() then
-            _player_track:set_field("Evasion", true)
-            _player_track:set_field("EvasionBuffer", true)
+    if _player_chara == nil then return end
+    local job = _player_chara:get_field("<Human>k__BackingField"):get_JobContext():get_field("CurrentJob")
+    if job == 6 or job == 3 or job == 10 then -- TODO confirm warferer later.
+        if not _player_track then _player_track = GetPlayerTrack() end
+        if not _free_fall_controller then _free_fall_controller = GetFreeFallController() end
+        if _player_track and _free_fall_controller then
+            if _free_fall_controller:get_IsActive() then
+                _player_track:set_field("Evasion", true)
+                _player_track:set_field("EvasionBuffer", true)
+            end
         end
     end
 end
