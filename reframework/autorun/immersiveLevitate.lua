@@ -1,6 +1,6 @@
 -- author : BeerShigachi
--- date : 23 April 2024
--- version: 2.1.3
+-- date : 27 April 2024
+-- version: 3.0.0
 
 -- CONFIG:
 local MAX_ALTITUDE = 6.0
@@ -12,6 +12,8 @@ local RE_LEVITATE_INTERVAL = 10.0
 local DISABLE_STAMINA_COST = false
 local FALL_DEACCELERATE = 2000.0
 local START_FALL_ANIMATION_FRAME_COUNT = 500.0
+local NPC_MAX_ALTITUDE = 5.0
+local NPC_LEVITATE_DURATION = 6.0
 
 if RE_LEVITATE_INTERVAL > LEVITATE_DURATION then
     RE_LEVITATE_INTERVAL = LEVITATE_DURATION
@@ -231,35 +233,18 @@ local function set_fall_param()
     end
 end
 
-local function dummy_hook()
-end
-
-local function wrapped_init()
-end
-
-local function get_levitate_param_obj()
-    local _levitate_ctrl = GetLevitateController()
-    local _levitate_param
-    if  _levitate_ctrl then
-        _levitate_param = _levitate_ctrl:get_field("Param")
-    end
-    return _levitate_param
-end
-
-local function set_levitate_param_inner(param)
-    param:set_field("MaxHeight", MAX_ALTITUDE)
-    param:set_field("MaxKeepSec", LEVITATE_DURATION)
+local function create_levitate_param(altidude, duration, origin)
+    local param = sdk.find_type_definition("app.LevitateController.Parameter"):create_instance()
+    param:set_field("MaxHeight", altidude)
+    param:set_field("MaxKeepSec", duration)
+    param:set_field("HorizontalAccel", origin["HorizontalAccel"])
+    param:set_field("HorizontalMaxSpeed", origin["HorizontalMaxSpeed"])
+    param:set_field("HorizontalSpeedRatio", origin["HorizontalSpeedRatio"])
     param:set_field("FallDeccel", FALL_DEACCELERATE)
-end
-
-local function init_levitate_param()
-    local _levitate_param = get_levitate_param_obj()
-    if _levitate_param then
-        set_levitate_param_inner(_levitate_param)
-        wrapped_init = function ()
-            return dummy_hook()
-        end
-    end
+    param:set_field("RiseAccel", 4.0)
+    param:set_field("MaxRiseSpeed", 5.0)
+    param:set_field("HorizontalDeccel", 3.8)
+    return param
 end
 
 local function init_()
@@ -274,14 +259,7 @@ local function init_()
     _humanCommonActionCtrl = nil
     _player_chara = nil
     _staminaManager = nil
-    wrapped_init = function ()
-        return init_levitate_param()
-    end
     set_fall_param()
-end
-
-wrapped_init = function ()
-    return init_levitate_param()
 end
 
 init_()
@@ -295,13 +273,36 @@ sdk.hook(
     end
 )
 
-sdk.hook(sdk.find_type_definition("app.LevitateController"):get_method("setParameter(app.LevitateController.Parameter)"),
-    dummy_hook,
-    function (...)
-        wrapped_init()
-        return ...
-    end)
+local function set_new_levitate_param(human, cache, altidude, duration, origin_param)
+    if cache == nil then
+        cache = create_levitate_param(altidude, duration, origin_param)
+        human["<LevitateCtrl>k__BackingField"]["Param"] = cache
+    else
+        human["<LevitateCtrl>k__BackingField"]["Param"] = cache
+    end
+end
 
+local args_
+local player_param_cache
+local npc_param_cache
+sdk.hook(sdk.find_type_definition("app.LevitateAction"):get_method("start(via.behaviortree.ActionArg)"),
+function (args)
+    args_ = args
+end,
+function (rtval)
+    local this_human = sdk.to_managed_object(args_[2])["Human"]
+    local this_param = this_human["<LevitateCtrl>k__BackingField"]["Param"]
+    if this_human == _manualPlayerHuman then
+        set_new_levitate_param(this_human, player_param_cache, MAX_ALTITUDE, LEVITATE_DURATION, this_param)
+    else
+        set_new_levitate_param(this_human, npc_param_cache, NPC_MAX_ALTITUDE, NPC_LEVITATE_DURATION, this_param)
+    end
+    return rtval
+end)
+
+-- perhaps use these hook when applying stamina system to npcs.
+--app.LevitateAction.update(via.behaviortree.ActionArg)
+--app.LevitateAction.updateLevitate()
 re.on_frame(function ()
     updateOptFlySpeed()
     expendStaminaTolevitate()
