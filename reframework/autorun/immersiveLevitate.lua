@@ -1,6 +1,6 @@
 -- author : BeerShigachi
 -- date : 29 April 2024
--- version: 3.0.2
+-- version: 3.0.3
 
 -- CONFIG:
 local MAX_ALTITUDE = 6.0
@@ -223,20 +223,19 @@ function (args)
 
 end,
 function (rtval)
-    local this_chara = sdk.to_managed_object(args_fall_guard_start[2]):get_field("Human"):get_field("<Chara>k__BackingField")
-    if this_chara == _player_chara then
+    if sdk.to_managed_object(args_fall_guard_start[2]):get_field("Human") == _manualPlayerHuman then
         is_active_fall_guard = true
     end
     return rtval
 end)
 
-local _caller_fall_guard
+local _args_fall_guard_end
 sdk.hook(sdk.find_type_definition("app.Job01FallGuard"):get_method("end(via.behaviortree.ActionArg)"),
 function (args)
-    _caller_fall_guard = sdk.to_managed_object(args[2]):get_field("Human"):get_field("<Chara>k__BackingField")
+    _args_fall_guard_end = args
 end,
 function (rtval)
-    if _caller_fall_guard == _player_chara then
+    if sdk.to_managed_object(_args_fall_guard_end[2]):get_field("Human") == _manualPlayerHuman then
         is_active_fall_guard = false
     end
     return rtval
