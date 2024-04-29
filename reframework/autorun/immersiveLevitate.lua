@@ -1,6 +1,6 @@
 -- author : BeerShigachi
--- date : 27 April 2024
--- version: 3.0.1
+-- date : 29 April 2024
+-- version: 3.0.2
 
 -- CONFIG:
 local MAX_ALTITUDE = 6.0
@@ -215,10 +215,37 @@ local function expendStaminaTolevitate()
     end
 end
 
+local is_active_fall_guard = false
+local args_fall_guard_start
+sdk.hook(sdk.find_type_definition("app.Job01FallGuard"):get_method("start(via.behaviortree.ActionArg)"),
+function (args)
+    args_fall_guard_start = args
+
+end,
+function (rtval)
+    local this_chara = sdk.to_managed_object(args_fall_guard_start[2]):get_field("Human"):get_field("<Chara>k__BackingField")
+    if this_chara == _player_chara then
+        is_active_fall_guard = true
+    end
+    return rtval
+end)
+
+local _caller_fall_guard
+sdk.hook(sdk.find_type_definition("app.Job01FallGuard"):get_method("end(via.behaviortree.ActionArg)"),
+function (args)
+    _caller_fall_guard = sdk.to_managed_object(args[2]):get_field("Human"):get_field("<Chara>k__BackingField")
+end,
+function (rtval)
+    if _caller_fall_guard == _player_chara then
+        is_active_fall_guard = false
+    end
+    return rtval
+end)
+
+
 local function updateEvasionFlag()
     if _player_chara == nil then return end
-    local job = _player_chara:get_field("<Human>k__BackingField"):get_JobContext():get_field("CurrentJob")
-    if job == 6 or job == 3 or job == 10 then -- TODO confirm warferer later.
+    if is_active_fall_guard == false then
         if not _player_track then _player_track = GetPlayerTrack() end
         if not _free_fall_controller then _free_fall_controller = GetFreeFallController() end
         if _player_track and _free_fall_controller then
