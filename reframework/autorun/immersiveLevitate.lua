@@ -1,6 +1,6 @@
 -- author : BeerShigachi
 -- date : 29 April 2024
--- version: 3.0.3
+-- version: 3.0.4
 
 -- CONFIG:
 local MAX_ALTITUDE = 6.0
@@ -12,8 +12,9 @@ local RE_LEVITATE_INTERVAL = 10.0
 local DISABLE_STAMINA_COST = false
 local FALL_DEACCELERATE = 2000.0
 local START_FALL_ANIMATION_FRAME_COUNT = 500.0
-local NPC_MAX_ALTITUDE = 5.0
+local NPC_MAX_ALTITUDE = 4.0
 local NPC_LEVITATE_DURATION = 6.0
+local PAWN_FLY_SPEED_MULTIPLIER = 2.0
 
 if RE_LEVITATE_INTERVAL > LEVITATE_DURATION then
     RE_LEVITATE_INTERVAL = LEVITATE_DURATION
@@ -23,13 +24,6 @@ end
 local re = re
 local sdk = sdk
 
-local _pause_manager
-local function GetPauseManager()
-    if not _pause_manager then
-        _pause_manager = sdk.get_managed_singleton("app.PauseManager")
-    end
-    return _pause_manager
-end
 
 local _characterManager
 local function GetCharacterManager()
@@ -70,6 +64,39 @@ local function GetManualPlayer()
         end
     end
     return _player_chara
+end
+
+local _player_stamina_manager
+local function GetPlayerStaminaManager()
+    if _player_stamina_manager == nil then
+        local chara = GetManualPlayer()
+        if chara then
+            _player_stamina_manager = chara:get_StaminaManager()
+        end
+    end
+    return _player_stamina_manager
+end
+
+local _player_levitate_controller
+local function GetPlayerLevitateController()
+    local manualPlayerHuman = GetManualPlayerHuman()
+    if manualPlayerHuman then
+        if _player_levitate_controller == nil then 
+            _player_levitate_controller = manualPlayerHuman:get_LevitateCtrl()
+        end
+    end
+    return _player_levitate_controller
+end
+
+local _player_human_common_action_ctrl
+local function GetPlayerHumanCommonActionCtrl()
+    local manualPlayerHuman = GetManualPlayerHuman()
+    if manualPlayerHuman then
+        if _player_human_common_action_ctrl == nil then
+            _player_human_common_action_ctrl = manualPlayerHuman:get_HumanCommonActionCtrl()
+        end
+    end
+    return _player_human_common_action_ctrl
 end
 
 local _human_param
@@ -138,80 +165,29 @@ local function GetPlayerTrack()
     return _player_track
 end
 
-local _staminaManager
-local function GetStaminaManager()
-    if not _staminaManager then
-        local manualPlayer = GetManualPlayer()
-        if manualPlayer then
-            _staminaManager = manualPlayer:get_StaminaManager()
-            if not _staminaManager then
-                local temp_player_ = sdk.get_managed_singleton("app.CharacterManager"):get_ManualPlayer()
-                if temp_player_ then
-                    _staminaManager = temp_player_:get_StaminaManager()
-                end
-            end
-        end
-    end
-    return _staminaManager
+local function updateOptFlySpeed(levitate_controller, default_fly_velocity, multiplier)
+    if not levitate_controller:get_IsActive() or default_fly_velocity < 0 then return end
+    levitate_controller:set_field("HorizontalSpeed", default_fly_velocity * multiplier)
 end
 
-local _levitateController
-local function GetLevitateController()
-    local manualPlayerHuman = GetManualPlayerHuman()
-    if manualPlayerHuman then
-        if _levitateController == nil then _levitateController = manualPlayerHuman:get_LevitateCtrl() end
-    end
-    return _levitateController
+local function activateReLevitate(levitate_controller, human_common_action_ctrl)
+    local timer = levitate_controller:get_field("TotalTimer")
+    if timer < RE_LEVITATE_INTERVAL and levitate_controller:get_IsActive() then return end
+    human_common_action_ctrl:set_field("<IsEnableLevitate>k__BackingField", true)
 end
 
-local _humanCommonActionCtrl
-local function GetHumanCommonActionCtrl()
-    local manualPlayerHuman = GetManualPlayerHuman()
-    if manualPlayerHuman then
-        if _humanCommonActionCtrl == nil then
-            _humanCommonActionCtrl = manualPlayerHuman:get_HumanCommonActionCtrl()
-        end
-    end
-    return _humanCommonActionCtrl
-end
-
-local function updateOptFlySpeed()
-    if not _manualPlayerHuman then _manualPlayerHuman = GetManualPlayerHuman() end
-    if not _levitateController then _levitateController = GetLevitateController() end
-    if not _manualPlayerHuman or not _levitateController then return end
-    local defaultFlyingSpeed = _manualPlayerHuman:get_field("MoveSpeedTypeValueInternal")
-    if defaultFlyingSpeed < 0 then return end
-    _levitateController:set_field("HorizontalSpeed", defaultFlyingSpeed * FLY_SPEED_MULTIPLIER)
-end
-
-local function activateReLevitate()
-    if RE_LEVITATE_INTERVAL > LEVITATE_DURATION then return end
-    if not _levitateController then _levitateController = GetLevitateController() end
-    if not _humanCommonActionCtrl then _humanCommonActionCtrl = GetHumanCommonActionCtrl() end
-    if not _levitateController or not _humanCommonActionCtrl then return end
-    local timer = _levitateController:get_field("TotalTimer")
-    if timer < RE_LEVITATE_INTERVAL and _levitateController:get_IsActive() then return end
-    _humanCommonActionCtrl:set_field("<IsEnableLevitate>k__BackingField", true)
-end
-
-local function expendStaminaTolevitate()
-    if DISABLE_STAMINA_COST then return end
-    if not _pause_manager then _pause_manager = GetPauseManager() end
-    if _pause_manager:isPausedAny() then return end
-    if not _levitateController then _levitateController = GetLevitateController() end
-    if not _staminaManager then _staminaManager = GetStaminaManager() end
-    if not _levitateController or not _staminaManager then return end
-    if not _levitateController:get_IsActive() then return end
-    local max_stamina = _staminaManager:get_MaxValue()
+local function expendStaminaTolevitate(levitate_controller, stamina_manager)
+    if not levitate_controller:get_IsActive() then return end -- TODO delete.
+    local max_stamina = stamina_manager:get_MaxValue()
     local cost = max_stamina * LEVITATE_STAMINA_MULTIPLIER * -1.0
-    local remains = _staminaManager:get_RemainingAmount()
+    local remains = stamina_manager:get_RemainingAmount()
     if remains <= 0.0  then
-        _levitateController:set_field("<IsActive>k__BackingField", false)
+        stamina_manager:set_field("<IsActive>k__BackingField", false)
     end
-    if _levitateController:get_IsRise() then
-        _staminaManager:add(cost * ASCEND_STAMINA_MULTIPLIER, false)
+    if levitate_controller:get_IsRise() then -- todo maybe other function to hook
+        stamina_manager:add(cost * ASCEND_STAMINA_MULTIPLIER, false)
     else
-        _staminaManager:add(cost, false)
+        stamina_manager:add(cost, false)
     end
 end
 
@@ -240,7 +216,6 @@ function (rtval)
     end
     return rtval
 end)
-
 
 local function updateEvasionFlag()
     if _player_chara == nil then return end
@@ -277,32 +252,6 @@ local function create_levitate_param(altidude, duration, origin)
     return param
 end
 
-local function init_()
-    _pause_manager = nil
-    _characterManager = nil
-    _player = nil
-    _player_input_processor = nil
-    _player_track = nil
-    _free_fall_controller = nil
-    _manualPlayerHuman = nil
-    _levitateController = nil
-    _humanCommonActionCtrl = nil
-    _player_chara = nil
-    _staminaManager = nil
-    set_fall_param()
-end
-
-init_()
-
-sdk.hook(
-    sdk.find_type_definition("app.GuiManager"):get_method("OnChangeSceneType"),
-    function() end,
-    function(rtval)
-        init_()
-        return rtval
-    end
-)
-
 local function set_new_levitate_param(human, cache, altidude, duration, origin_param)
     if cache == nil then
         cache = create_levitate_param(altidude, duration, origin_param)
@@ -330,12 +279,74 @@ function (rtval)
     return rtval
 end)
 
--- perhaps use these hook when applying stamina system to npcs.
---app.LevitateAction.update(via.behaviortree.ActionArg)
---app.LevitateAction.updateLevitate()
+sdk.hook(sdk.find_type_definition("app.LevitateAction"):get_method("updateLevitate()"),
+    function (args)
+        if DISABLE_STAMINA_COST then return end
+        local this_human = sdk.to_managed_object(args[2])["Human"]
+        if this_human == _manualPlayerHuman then
+            if _player_levitate_controller and _player_stamina_manager then
+                expendStaminaTolevitate(_player_levitate_controller, _player_stamina_manager)
+            end
+        end
+    end)
+
+-- non player character does not re levitate with vanilla AI
+-- sdk.hook(sdk.find_type_definition("app.LevitateAction"):get_method("end(via.behaviortree.ActionArg)"),
+--     function (args)
+--         local this_human = sdk.to_managed_object(args[2])["Human"]
+--         if this_human ~= _manualPlayerHuman then
+--             this_human:get_HumanCommonActionCtrl():set_field("<IsEnableLevitate>k__BackingField", true)
+--             print("do pawns re levitate?")
+--         end
+--     end)
+
+sdk.hook(sdk.find_type_definition("app.Player"):get_method("lateUpdate()"),
+    function ()
+        updateOptFlySpeed(_player_levitate_controller, _manualPlayerHuman["MoveSpeedTypeValueInternal"], FLY_SPEED_MULTIPLIER)
+        activateReLevitate(_player_levitate_controller, _player_human_common_action_ctrl)
+    end)
+
+-- pawns never levitate in the mid air.
+sdk.hook(sdk.find_type_definition("app.Pawn"):get_method("onLateUpdate()"),
+    function (args)
+        local this_pawn_human = sdk.to_managed_object(args[2])["<CachedHuman>k__BackingField"]
+        updateOptFlySpeed(this_pawn_human:get_LevitateCtrl(), this_pawn_human["MoveSpeedTypeValueInternal"], PAWN_FLY_SPEED_MULTIPLIER)
+    end)
+
 re.on_frame(function ()
-    updateOptFlySpeed()
-    expendStaminaTolevitate()
-    activateReLevitate()
     updateEvasionFlag()
 end)
+
+local function init_()
+    _characterManager = nil
+    _player_chara = nil
+    _player_chara = GetManualPlayer()
+    _manualPlayerHuman = nil
+    _manualPlayerHuman = GetManualPlayerHuman()
+    _player_stamina_manager = nil
+    _player_stamina_manager = GetPlayerStaminaManager()
+    _player_levitate_controller = nil
+    _player_levitate_controller = GetPlayerLevitateController()
+    _player_human_common_action_ctrl = nil
+    _player_human_common_action_ctrl = GetPlayerHumanCommonActionCtrl()
+    _player = nil
+    _player_input_processor = nil
+    _player_track = nil
+    _free_fall_controller = nil
+    set_fall_param()
+end
+
+init_()
+
+re.on_script_reset(function ()
+    init_()
+end)
+
+sdk.hook(
+    sdk.find_type_definition("app.GuiManager"):get_method("OnChangeSceneType"),
+    function() end,
+    function(rtval)
+        init_()
+        return rtval
+    end
+)
