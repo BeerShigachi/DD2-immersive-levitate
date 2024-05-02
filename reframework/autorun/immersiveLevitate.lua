@@ -1,21 +1,32 @@
 -- author : BeerShigachi
--- date : 29 April 2024
--- version: 3.0.4
+-- date : 2 May 2024
+-- version: 3.1.0
 
 -- CONFIG:
-local MAX_ALTITUDE = 6.0
-local LEVITATE_DURATION = 10.0
-local FLY_SPEED_MULTIPLIER = 2.0
+local MAX_ALTITUDE = 20.0 -- defalut 2.0
+local LEVITATE_DURATION = 10.0 -- default 2.8
+local FLY_SPEED_MULTIPLIER = 2.0 -- set 1.0 for default speed
+local HORIZONTAL_ACCELERATION = 20.0 -- default 3.0
+local ASCEND_ACCELERATION = 4.0 -- default 4.0
+local MAX_ASCEND_SPEED = 5.0 -- defalut 5.0 CAUTION: set this value high without setting ASCEND_ACCELERATION very high results slow speed.
+local HORIZONTAL_DEACCELERATION = 3.8 -- default 3.8
 local LEVITATE_STAMINA_MULTIPLIER = 0.0005
 local ASCEND_STAMINA_MULTIPLIER = 3.0
-local RE_LEVITATE_INTERVAL = 10.0
+local RE_LEVITATE_INTERVAL = 10.0 -- set lower value like 0.5(so double tap to cancel levitate) if you dont want to flying too fast by spamming jump bottun.
 local DISABLE_STAMINA_COST = false
 local FALL_DEACCELERATE = 2000.0
 local START_FALL_ANIMATION_FRAME_COUNT = 500.0
-local NPC_MAX_ALTITUDE = 4.0
-local NPC_LEVITATE_DURATION = 6.0
-local PAWN_FLY_SPEED_MULTIPLIER = 2.0
+-- NPCs who can levitate seems like only pawns anyway.
+local NPC_MAX_ALTITUDE = 4.0 -- default 2.0
+local NPC_LEVITATE_DURATION = 6.0 -- defalut 2.8
+local PAWN_FLY_SPEED_MULTIPLIER = 2.0 -- default 1.0
+local NPC_HORIZONTAL_ACCELERATION = 3.0 -- defalut 3.0
+local NPC_ASCEND_ACCELERATION = 4.0 -- default 4.0
+local NPC_MAX_ASCEND_SPEED = 5.0 -- defalut 5.0
+local NPC_HORIZONTAL_DEACCELERATION -- default 3.8
 
+
+-- DO NOT TOUCH AFTER THIS LINE.
 if RE_LEVITATE_INTERVAL > LEVITATE_DURATION then
     RE_LEVITATE_INTERVAL = LEVITATE_DURATION
 end
@@ -184,7 +195,7 @@ local function expendStaminaTolevitate(levitate_controller, stamina_manager)
     if remains <= 0.0  then
         stamina_manager:set_field("<IsActive>k__BackingField", false)
     end
-    if levitate_controller:get_IsRise() then -- todo maybe other function to hook
+    if levitate_controller:get_IsRise() then
         stamina_manager:add(cost * ASCEND_STAMINA_MULTIPLIER, false)
     else
         stamina_manager:add(cost, false)
@@ -218,7 +229,6 @@ function (rtval)
 end)
 
 local function updateEvasionFlag()
-    if _player_chara == nil then return end
     if is_active_fall_guard == false then
         if not _player_track then _player_track = GetPlayerTrack() end
         if not _free_fall_controller then _free_fall_controller = GetFreeFallController() end
@@ -238,23 +248,23 @@ local function set_fall_param()
     end
 end
 
-local function create_levitate_param(altidude, duration, origin)
+local function create_levitate_param(altidude, duration, horizontal_accel, origin, rise_accel, max_rise_speed, horizontal_deaccel)
     local param = sdk.find_type_definition("app.LevitateController.Parameter"):create_instance()
     param:set_field("MaxHeight", altidude)
     param:set_field("MaxKeepSec", duration)
-    param:set_field("HorizontalAccel", origin["HorizontalAccel"])
+    param:set_field("HorizontalAccel", horizontal_accel)
     param:set_field("HorizontalMaxSpeed", origin["HorizontalMaxSpeed"])
     param:set_field("HorizontalSpeedRatio", origin["HorizontalSpeedRatio"])
     param:set_field("FallDeccel", FALL_DEACCELERATE)
-    param:set_field("RiseAccel", 4.0)
-    param:set_field("MaxRiseSpeed", 5.0)
-    param:set_field("HorizontalDeccel", 3.8)
+    param:set_field("RiseAccel", rise_accel)
+    param:set_field("MaxRiseSpeed", max_rise_speed)
+    param:set_field("HorizontalDeccel", horizontal_deaccel)
     return param
 end
 
-local function set_new_levitate_param(human, cache, altidude, duration, origin_param)
+local function set_new_levitate_param(human, cache, altidude, duration, horizontal_accel, origin_param, rise_accel, max_rise_speed, horizontal_deaccel)
     if cache == nil then
-        cache = create_levitate_param(altidude, duration, origin_param)
+        cache = create_levitate_param(altidude, duration, horizontal_accel, origin_param, rise_accel, max_rise_speed, horizontal_deaccel)
         human["<LevitateCtrl>k__BackingField"]["Param"] = cache
     else
         human["<LevitateCtrl>k__BackingField"]["Param"] = cache
@@ -272,9 +282,9 @@ function (rtval)
     local this_human = sdk.to_managed_object(args_[2])["Human"]
     local this_param = this_human["<LevitateCtrl>k__BackingField"]["Param"]
     if this_human == _manualPlayerHuman then
-        set_new_levitate_param(this_human, player_param_cache, MAX_ALTITUDE, LEVITATE_DURATION, this_param)
+        set_new_levitate_param(this_human, player_param_cache, MAX_ALTITUDE, LEVITATE_DURATION, HORIZONTAL_ACCELERATION, this_param, ASCEND_ACCELERATION, MAX_ASCEND_SPEED, HORIZONTAL_DEACCELERATION)
     else
-        set_new_levitate_param(this_human, npc_param_cache, NPC_MAX_ALTITUDE, NPC_LEVITATE_DURATION, this_param)
+        set_new_levitate_param(this_human, npc_param_cache, NPC_MAX_ALTITUDE, NPC_LEVITATE_DURATION, NPC_HORIZONTAL_ACCELERATION, this_param, NPC_ASCEND_ACCELERATION, NPC_MAX_ASCEND_SPEED, NPC_HORIZONTAL_DEACCELERATION)
     end
     return rtval
 end)
@@ -290,32 +300,23 @@ sdk.hook(sdk.find_type_definition("app.LevitateAction"):get_method("updateLevita
         end
     end)
 
--- non player character does not re levitate with vanilla AI
--- sdk.hook(sdk.find_type_definition("app.LevitateAction"):get_method("end(via.behaviortree.ActionArg)"),
---     function (args)
---         local this_human = sdk.to_managed_object(args[2])["Human"]
---         if this_human ~= _manualPlayerHuman then
---             this_human:get_HumanCommonActionCtrl():set_field("<IsEnableLevitate>k__BackingField", true)
---             print("do pawns re levitate?")
---         end
---     end)
-
 sdk.hook(sdk.find_type_definition("app.Player"):get_method("lateUpdate()"),
     function ()
+        updateEvasionFlag()
         updateOptFlySpeed(_player_levitate_controller, _manualPlayerHuman["MoveSpeedTypeValueInternal"], FLY_SPEED_MULTIPLIER)
         activateReLevitate(_player_levitate_controller, _player_human_common_action_ctrl)
     end)
 
--- pawns never levitate in the mid air.
 sdk.hook(sdk.find_type_definition("app.Pawn"):get_method("onLateUpdate()"),
     function (args)
         local this_pawn_human = sdk.to_managed_object(args[2])["<CachedHuman>k__BackingField"]
+        -- pawns never levitate in the mid air.
+        -- if this_pawn_human:get_HumanCommonActionCtrl():get_field("<IsEnableLevitate>k__BackingField") == false then
+        --     print(this_pawn_human:get_HumanCommonActionCtrl(), "not able to re levitate now")
+        --     this_pawn_human:get_HumanCommonActionCtrl():set_field("<IsEnableLevitate>k__BackingField", true)
+        -- end
         updateOptFlySpeed(this_pawn_human:get_LevitateCtrl(), this_pawn_human["MoveSpeedTypeValueInternal"], PAWN_FLY_SPEED_MULTIPLIER)
     end)
-
-re.on_frame(function ()
-    updateEvasionFlag()
-end)
 
 local function init_()
     _characterManager = nil
@@ -332,7 +333,9 @@ local function init_()
     _player = nil
     _player_input_processor = nil
     _player_track = nil
+    _player_track = GetPlayerTrack()
     _free_fall_controller = nil
+    _free_fall_controller = GetFreeFallController()
     set_fall_param()
 end
 
