@@ -1,6 +1,6 @@
 -- author : BeerShigachi
--- date : 2 May 2024
--- version: 3.1.0
+-- date : 5 May 2024
+-- version: 3.1.1
 
 -- CONFIG:
 local MAX_ALTITUDE = 20.0 -- defalut 2.0
@@ -193,7 +193,8 @@ local function expendStaminaTolevitate(levitate_controller, stamina_manager)
     local cost = max_stamina * LEVITATE_STAMINA_MULTIPLIER * -1.0
     local remains = stamina_manager:get_RemainingAmount()
     if remains <= 0.0  then
-        stamina_manager:set_field("<IsActive>k__BackingField", false)
+        levitate_controller:set_field("<IsActive>k__BackingField", false)
+        return
     end
     if levitate_controller:get_IsRise() then
         stamina_manager:add(cost * ASCEND_STAMINA_MULTIPLIER, false)
