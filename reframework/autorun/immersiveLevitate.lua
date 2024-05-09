@@ -30,7 +30,7 @@ local RE_LEVITATE_COST = 50.0 -- cost for re-levitate(non air sprint). used as t
 local COST_ONLY_AIR_SPRINT = false -- set false to enable stamina cost on non air sprinting re-levitate as well.
 local COMMON_RATIO = 1.4 -- higher value to grow the cost quicker. the value between non zero positive(or less than -1.0) to less than 1.0 shrink the cost(who wants that?) 
 local SIMPLIFIED = false -- set true to fix RE_LEVITATE_COST i.e. the cost of air sprint won't grow. equivalent to COMMON_RATIO = 1.0
-local SAFE_AIR_SPRINT = true -- set true to block air sprint automatically when insufficient stamina remains.
+local SAFE_AIR_SPRINT = true -- set true to block (only)air sprint automatically when insufficient stamina remains.
 
 --[[ 
 Only to interrupt spamming re-levitate. Recommend to use either this or stamina system for re-levitate.
@@ -224,7 +224,7 @@ local function expendStaminaToReLevitate(stamina_manager, last)
         stamina_manager:add(scale_factor * -1.0, false)
         scale_factor = scale_factor * r
         local remains = stamina_manager:get_RemainingAmount()
-        if remains <= scale_factor  then
+        if SAFE_AIR_SPRINT and remains <= scale_factor  then
             _block_levitate = true
         end
     else
@@ -260,6 +260,7 @@ local function expendStaminaTolevitate(levitate_controller, stamina_manager)
     local remains = stamina_manager:get_RemainingAmount()
     if remains <= 0.0  then
         levitate_controller:set_field("<IsActive>k__BackingField", false)
+        _block_levitate = true
         return
     end
     if levitate_controller:get_IsRise() then
@@ -367,6 +368,17 @@ function (args)
 end
 )
 
+local start_pause = 0.0
+sdk.hook(sdk.find_type_definition("app.PauseManager"):get_method("requestPause(System.Boolean, app.PauseManager.PauseType, System.String, System.Action)"),
+function (args)
+    local bool = (sdk.to_int64(args[3]) & 1) == 1
+    if bool then
+        start_pause = os.clock()
+    else
+        local elapsed_pause_time = os.clock() - start_pause
+        last_levitation_start = last_levitation_start + elapsed_pause_time
+    end
+end)
 
 sdk.hook(sdk.find_type_definition("app.LevitateAction"):get_method("updateLevitate()"),
     function (args)
