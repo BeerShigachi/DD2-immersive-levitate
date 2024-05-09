@@ -23,9 +23,10 @@ Stamina system for re-levitate.
 When you air sprint continuously, the cost of air sprint keeps growing (in a geometric sequence).
 RE_LEVITATE_COST is used as base cost for this. To reset the cost, stop air sprinting or land on a terrain.
 e.g. Let RE_LEVITATE_COST is 20.0 and COMMON_RATIO is 2.0 then the cost of air sprint grows 20.0 -> 40.0 -> 80.0 -> 160.0
+set RE_LEVITATE_COST = 0.0 to diable re-levitate stamina system.
 --]]
 local AIR_SPRINT_THRESHOLD = 2.0 -- if you re-levitate before x sec pass it is considered as air sprinting.
-local RE_LEVITATE_COST = 50.0 -- set 0.0 to disable. cost for re-levitate(non air sprint). used as the scale factor in a geometric sequence as well.
+local RE_LEVITATE_COST = 50.0 -- cost for re-levitate(non air sprint). used as the scale factor in a geometric sequence as well.
 local COST_ONLY_AIR_SPRINT = true -- set false to enable stamina cost on non air sprinting re-levitate as well.
 local COMMON_RATIO = 1.4 -- higher value to grow the cost quicker. the value between non zero positive(or less than -1.0) to less than 1.0 shrink the cost(who wants that?) 
 local SIMPLIFIED = false -- set true to fix RE_LEVITATE_COST i.e. it won't grow. equivalent to COMMON_RATIO = 1.0 or AIR_SPRINT_THRESHOLD = 0.0
