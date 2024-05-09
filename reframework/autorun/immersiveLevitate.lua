@@ -6,7 +6,7 @@
 local MAX_ALTITUDE = 20.0 -- defalut 2.0
 local LEVITATE_DURATION = 10.0 -- default 2.8
 local FLY_SPEED_MULTIPLIER = 2.0 -- set 1.0 for default speed
-local HORIZONTAL_ACCELERATION = 20.0 -- default 3.0
+local HORIZONTAL_ACCELERATION = 3.0 -- default 3.0
 local ASCEND_ACCELERATION = 4.0 -- default 4.0
 local MAX_ASCEND_SPEED = 5.0 -- defalut 5.0 CAUTION: set this value high without setting ASCEND_ACCELERATION very high results slow speed.
 local HORIZONTAL_DEACCELERATION = 3.8 -- default 3.8
@@ -16,6 +16,28 @@ local RE_LEVITATE_INTERVAL = 10.0 -- set lower value like 0.5(so double tap to c
 local DISABLE_STAMINA_COST = false
 local FALL_DEACCELERATE = 2000.0
 local START_FALL_ANIMATION_FRAME_COUNT = 500.0
+
+--[[
+Stamina system for re-levitate. 
+"Air sprint" means spamming re-levitate within AIR_SPRINT_THRESHOLD.
+When you air sprint continuously, the cost of air sprint keeps growing (in a geometric sequence).
+RE_LEVITATE_COST is used as base cost for this. To reset the cost, stop air sprinting or land on a terrain.
+e.g. Let RE_LEVITATE_COST is 20.0 and COMMON_RATIO is 2.0 then the cost of air sprint grows 20.0 -> 40.0 -> 80.0 -> 160.0
+--]]
+local AIR_SPRINT_THRESHOLD = 2.0 -- if you re-levitate before x sec pass it is considered as air sprinting.
+local RE_LEVITATE_COST = 50.0 -- set 0.0 to disable. cost for re-levitate(non air sprint). used as the scale factor in a geometric sequence as well.
+local COST_ONLY_AIR_SPRINT = true -- set false to enable stamina cost on non air sprinting re-levitate as well.
+local COMMON_RATIO = 1.5 -- higher value to grow the cost quicker. the value between non zero positive(or less than -1.0) to less than 1.0 shrink the cost(who wants that?) 
+local SIMPLIFIED = false -- set true to fix RE_LEVITATE_COST i.e. it won't grow. equivalent to COMMON_RATIO = 1.0 or AIR_SPRINT_THRESHOLD = 0.0
+
+--[[ 
+Only to interrupt spamming re-levitate. Recommend to use either this or stamina system for re-levitate.
+This can be used with re-levitation stamina system but a bit complecated to find a good balance and can be broken when set wrong
+If you use this with re-levitation stamina system the valeus have to be `SPAM_RE_LEVITATE_COOLDOWN < AIR_SPRINT_THRESHOLD`
+e.g. SPAM_RE_LEVITATE_COOLDOWN = 0.5, AIR_SPRINT_THRESHOLD = 2.0
+--]]
+local SPAM_RE_LEVITATE_COOLDOWN = 0.0 -- set 0.0 to disable 
+
 -- NPCs who can levitate seems like only pawns anyway.
 local NPC_MAX_ALTITUDE = 4.0 -- default 2.0
 local NPC_LEVITATE_DURATION = 6.0 -- defalut 2.8
@@ -23,7 +45,7 @@ local PAWN_FLY_SPEED_MULTIPLIER = 2.0 -- default 1.0
 local NPC_HORIZONTAL_ACCELERATION = 3.0 -- defalut 3.0
 local NPC_ASCEND_ACCELERATION = 4.0 -- default 4.0
 local NPC_MAX_ASCEND_SPEED = 5.0 -- defalut 5.0
-local NPC_HORIZONTAL_DEACCELERATION -- default 3.8
+local NPC_HORIZONTAL_DEACCELERATION = 3.8 -- default 3.8
 
 
 -- DO NOT TOUCH AFTER THIS LINE.
@@ -34,7 +56,6 @@ end
 
 local re = re
 local sdk = sdk
-
 
 local _characterManager
 local function GetCharacterManager()
@@ -181,10 +202,49 @@ local function updateOptFlySpeed(levitate_controller, default_fly_velocity, mult
     levitate_controller:set_field("HorizontalSpeed", default_fly_velocity * multiplier)
 end
 
-local function activateReLevitate(levitate_controller, human_common_action_ctrl)
+local cacheIsAirEvadeEnableInternal
+sdk.hook(sdk.find_type_definition("app.HumanCommonActionController"):get_method("disableAirEvadeAfterUsed()"),
+function (args)
+    local this = sdk.to_managed_object(args[2])
+    if this["IsPlayer"] then
+        cacheIsAirEvadeEnableInternal = this["IsAirEvadeEnableInternal"]
+    end
+end)
+
+local scale_factor = RE_LEVITATE_COST
+local r = COMMON_RATIO
+if SIMPLIFIED then
+    r = 1.0
+end
+local function expendStaminaToReLevitate(stamina_manager, last)
+    if os.clock() - last < AIR_SPRINT_THRESHOLD and cacheIsAirEvadeEnableInternal == false then
+        print("spamming")
+        stamina_manager:add(scale_factor * -1.0, false)
+        scale_factor = scale_factor * r
+    else
+        -- reset the base first
+        scale_factor = RE_LEVITATE_COST
+        if not COST_ONLY_AIR_SPRINT then
+            stamina_manager:add(scale_factor * -1.0, false)
+            print("cost stamina when just re-levitate")
+        end
+        print("not spamming")
+    end
+end
+
+local function activateReLevitate(levitate_controller, human_common_action_ctrl, last)
+    local levitating = levitate_controller:get_IsActive()
     local timer = levitate_controller:get_field("TotalTimer")
-    if timer < RE_LEVITATE_INTERVAL and levitate_controller:get_IsActive() then return end
+    if timer < RE_LEVITATE_INTERVAL and levitating then return end
+    if os.clock() - last < SPAM_RE_LEVITATE_COOLDOWN then return end
     human_common_action_ctrl:set_field("<IsEnableLevitate>k__BackingField", true)
+end
+
+local function resetReLevitateCost(human_common_action_ctrl)
+    if human_common_action_ctrl["IsAirEvadeEnableInternal"] and scale_factor ~= RE_LEVITATE_COST then
+        scale_factor = RE_LEVITATE_COST
+        print("reset")
+    end
 end
 
 local function expendStaminaTolevitate(levitate_controller, stamina_manager)
@@ -290,6 +350,18 @@ function (rtval)
     return rtval
 end)
 
+local last_levitation_start = os.clock()
+sdk.hook(sdk.find_type_definition("app.LevitateController"):get_method("start(via.vec3)"),
+function (args)
+    local this_transform = sdk.to_managed_object(args[2])["Trans"]
+    if this_transform == _player_chara["<Transform>k__BackingField"] then
+        expendStaminaToReLevitate(_player_stamina_manager, last_levitation_start)
+        last_levitation_start = os.clock()
+    end
+end
+)
+
+
 sdk.hook(sdk.find_type_definition("app.LevitateAction"):get_method("updateLevitate()"),
     function (args)
         if DISABLE_STAMINA_COST then return end
@@ -303,9 +375,10 @@ sdk.hook(sdk.find_type_definition("app.LevitateAction"):get_method("updateLevita
 
 sdk.hook(sdk.find_type_definition("app.Player"):get_method("lateUpdate()"),
     function ()
+        resetReLevitateCost(_player_human_common_action_ctrl)
         updateEvasionFlag()
         updateOptFlySpeed(_player_levitate_controller, _manualPlayerHuman["MoveSpeedTypeValueInternal"], FLY_SPEED_MULTIPLIER)
-        activateReLevitate(_player_levitate_controller, _player_human_common_action_ctrl)
+        activateReLevitate(_player_levitate_controller, _player_human_common_action_ctrl, last_levitation_start)
     end)
 
 sdk.hook(sdk.find_type_definition("app.Pawn"):get_method("onLateUpdate()"),
