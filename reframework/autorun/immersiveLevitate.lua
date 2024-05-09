@@ -1,6 +1,6 @@
 -- author : BeerShigachi
--- date : 5 May 2024
--- version: 3.1.1
+-- date : 9 May 2024
+-- version: 3.2.0
 
 -- CONFIG:
 local MAX_ALTITUDE = 20.0 -- defalut 2.0
@@ -27,7 +27,7 @@ e.g. Let RE_LEVITATE_COST is 20.0 and COMMON_RATIO is 2.0 then the cost of air s
 local AIR_SPRINT_THRESHOLD = 2.0 -- if you re-levitate before x sec pass it is considered as air sprinting.
 local RE_LEVITATE_COST = 50.0 -- set 0.0 to disable. cost for re-levitate(non air sprint). used as the scale factor in a geometric sequence as well.
 local COST_ONLY_AIR_SPRINT = true -- set false to enable stamina cost on non air sprinting re-levitate as well.
-local COMMON_RATIO = 1.5 -- higher value to grow the cost quicker. the value between non zero positive(or less than -1.0) to less than 1.0 shrink the cost(who wants that?) 
+local COMMON_RATIO = 1.4 -- higher value to grow the cost quicker. the value between non zero positive(or less than -1.0) to less than 1.0 shrink the cost(who wants that?) 
 local SIMPLIFIED = false -- set true to fix RE_LEVITATE_COST i.e. it won't grow. equivalent to COMMON_RATIO = 1.0 or AIR_SPRINT_THRESHOLD = 0.0
 
 --[[ 
@@ -218,7 +218,6 @@ if SIMPLIFIED then
 end
 local function expendStaminaToReLevitate(stamina_manager, last)
     if os.clock() - last < AIR_SPRINT_THRESHOLD and cacheIsAirEvadeEnableInternal == false then
-        print("spamming")
         stamina_manager:add(scale_factor * -1.0, false)
         scale_factor = scale_factor * r
     else
@@ -226,9 +225,7 @@ local function expendStaminaToReLevitate(stamina_manager, last)
         scale_factor = RE_LEVITATE_COST
         if not COST_ONLY_AIR_SPRINT then
             stamina_manager:add(scale_factor * -1.0, false)
-            print("cost stamina when just re-levitate")
         end
-        print("not spamming")
     end
 end
 
@@ -243,12 +240,10 @@ end
 local function resetReLevitateCost(human_common_action_ctrl)
     if human_common_action_ctrl["IsAirEvadeEnableInternal"] and scale_factor ~= RE_LEVITATE_COST then
         scale_factor = RE_LEVITATE_COST
-        print("reset")
     end
 end
 
 local function expendStaminaTolevitate(levitate_controller, stamina_manager)
-    if not levitate_controller:get_IsActive() then return end -- TODO delete.
     local max_stamina = stamina_manager:get_MaxValue()
     local cost = max_stamina * LEVITATE_STAMINA_MULTIPLIER * -1.0
     local remains = stamina_manager:get_RemainingAmount()
