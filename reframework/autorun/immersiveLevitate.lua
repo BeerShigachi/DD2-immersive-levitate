@@ -1,14 +1,17 @@
 -- author : BeerShigachi
--- date : 9 May 2024
--- version: 3.2.0
+-- date : 11 May 2024
+-- version: 3.3.0
 
 -- CONFIG:
 local MAX_ALTITUDE = 20.0 -- defalut 2.0
+local MAX_ALTITUDE_DESCEND = 40.0 -- the height you can descend at once when descending mode.
 local LEVITATE_DURATION = 10.0 -- default 2.8
 local FLY_SPEED_MULTIPLIER = 2.0 -- set 1.0 for default speed
 local HORIZONTAL_ACCELERATION = 3.0 -- default 3.0
-local ASCEND_ACCELERATION = 4.0 -- default 4.0
-local MAX_ASCEND_SPEED = 5.0 -- defalut 5.0 CAUTION: set this value high without setting ASCEND_ACCELERATION very high results slow speed.
+local ASCEND_ACCELERATION = 6.0 -- default 4.0
+local MAX_ASCEND_SPEED = 10.0 -- defalut 5.0 CAUTION: set this value high without setting ASCEND_ACCELERATION very high results slow speed.
+local DESCEND_ACCELERATION = 6.0 -- opposite of  ASCEND_ACCELERATION
+local MAX_DESCEND_SPEED = 10.0 -- opposite of MAX_ASCEND_SPEED
 local HORIZONTAL_DEACCELERATION = 3.8 -- default 3.8
 local LEVITATE_STAMINA_MULTIPLIER = 0.0005
 local ASCEND_STAMINA_MULTIPLIER = 3.0
@@ -50,20 +53,28 @@ local NPC_MAX_ASCEND_SPEED = 5.0 -- defalut 5.0
 local NPC_HORIZONTAL_DEACCELERATION = 3.8 -- default 3.8
 
 
+
 -- DO NOT TOUCH AFTER THIS LINE.
 if RE_LEVITATE_INTERVAL > LEVITATE_DURATION then
     RE_LEVITATE_INTERVAL = LEVITATE_DURATION
 end
 
+if DESCEND_ACCELERATION > 0 then
+    DESCEND_ACCELERATION = DESCEND_ACCELERATION * -1
+end
+
+if MAX_DESCEND_SPEED > 0 then
+    MAX_DESCEND_SPEED = MAX_DESCEND_SPEED * -1
+end
 
 local re = re
 local sdk = sdk
 local _block_levitate = false
 
-
 local state_holder = {
-    previousRequestDash = nil,
-    cacheIsAirEvadeEnableInternal = nil,
+    previousRequestDash = false,
+    descend_mode = false,
+    cacheIsAirEvadeEnableInternal = false,
     is_active_fall_guard = false
 }
 
@@ -77,15 +88,20 @@ local timestamps = {
     last_levitation_start = os.clock()
 }
 
-local function detectStateChange(state, previous_state)
-    if state ~= previous_state then
-        previous_state = state
+local function detectStateChange(state, cached_states, key)
+    if state ~= cached_states[key] then
+        cached_states[key] = state
         return true
     else
         return false
     end
 end
 
+local function initTable(table_, init_val)
+    for k, v in pairs(table_) do
+        table_[k] = init_val
+    end
+end
 
 local _characterManager
 local function GetCharacterManager()
@@ -272,7 +288,14 @@ local function activateReLevitate(levitate_controller, human_common_action_ctrl,
     human_common_action_ctrl:set_field("<IsEnableLevitate>k__BackingField", true)
 end
 
-local function resetReLevitateCost(human_common_action_ctrl, last)
+-- there were too many situations that player stands on a ground. so perhaps checking in update is the best option.
+local function resetOnGround(human_common_action_ctrl, last)
+    if human_common_action_ctrl["IsAirEvadeEnableInternal"] and state_holder.descend_mode == true then
+        levitate_params.player_param_cache["RiseAccel"] = ASCEND_ACCELERATION
+        levitate_params.player_param_cache["MaxRiseSpeed"] = MAX_ASCEND_SPEED
+        state_holder.descend_mode = false
+        print("descend_mode", state_holder.descend_mode)
+    end
     if human_common_action_ctrl["IsAirEvadeEnableInternal"] and scale_factor ~= RE_LEVITATE_COST then
         scale_factor = RE_LEVITATE_COST
         _block_levitate = false
@@ -285,7 +308,7 @@ local function expendStaminaTolevitate(levitate_controller, stamina_manager)
     local max_stamina = stamina_manager:get_MaxValue()
     local cost = max_stamina * LEVITATE_STAMINA_MULTIPLIER * -1.0
     local remains = stamina_manager:get_RemainingAmount()
-    if remains <= 0.0  then
+    if remains <= 0.0 then
         levitate_controller:set_field("<IsActive>k__BackingField", false)
         _block_levitate = true
         return
@@ -345,26 +368,14 @@ local function set_fall_param()
 end
 
 local function create_levitate_param(altidude, duration, horizontal_accel, origin, rise_accel, max_rise_speed, horizontal_deaccel)
-    local param = sdk.find_type_definition("app.LevitateController.Parameter"):create_instance()
-    param:set_field("MaxHeight", altidude)
-    param:set_field("MaxKeepSec", duration)
-    param:set_field("HorizontalAccel", horizontal_accel)
-    param:set_field("HorizontalMaxSpeed", origin["HorizontalMaxSpeed"])
-    param:set_field("HorizontalSpeedRatio", origin["HorizontalSpeedRatio"])
-    param:set_field("FallDeccel", FALL_DEACCELERATE)
-    param:set_field("RiseAccel", rise_accel)
-    param:set_field("MaxRiseSpeed", max_rise_speed)
-    param:set_field("HorizontalDeccel", horizontal_deaccel)
-    return param
-end
-
-local function set_new_levitate_param(human, cache, altidude, duration, horizontal_accel, origin_param, rise_accel, max_rise_speed, horizontal_deaccel)
-    if cache == nil then
-        cache = create_levitate_param(altidude, duration, horizontal_accel, origin_param, rise_accel, max_rise_speed, horizontal_deaccel)
-        human["<LevitateCtrl>k__BackingField"]["Param"] = cache
-    else
-        human["<LevitateCtrl>k__BackingField"]["Param"] = cache
-    end
+    origin:set_field("MaxHeight", altidude)
+    origin:set_field("MaxKeepSec", duration)
+    origin:set_field("HorizontalAccel", horizontal_accel)
+    origin:set_field("FallDeccel", FALL_DEACCELERATE)
+    origin:set_field("RiseAccel", rise_accel)
+    origin:set_field("MaxRiseSpeed", max_rise_speed)
+    origin:set_field("HorizontalDeccel", horizontal_deaccel)
+    return origin
 end
 
 sdk.hook(sdk.find_type_definition("app.LevitateAction"):get_method("start(via.behaviortree.ActionArg)"),
@@ -376,16 +387,16 @@ function (rtval)
     local this_human = thread.get_hook_storage()["this"]["Human"]
     local this_param = this_human["<LevitateCtrl>k__BackingField"]["Param"]
     if this_human == _manualPlayerHuman then
-        if levitate_params.player_param_cache then
-            this_human["<LevitateCtrl>k__BackingField"]["Param"] = levitate_params.player_param_cache
-        else
+        if levitate_params.player_param_cache == nil then
             levitate_params.player_param_cache = create_levitate_param(MAX_ALTITUDE, LEVITATE_DURATION, HORIZONTAL_ACCELERATION, this_param, ASCEND_ACCELERATION, MAX_ASCEND_SPEED, HORIZONTAL_DEACCELERATION)
-            this_human["<LevitateCtrl>k__BackingField"]["Param"] = levitate_params.player_param_cache
         end
+        this_human["<LevitateCtrl>k__BackingField"]["Param"] = levitate_params.player_param_cache
     else
-        set_new_levitate_param(this_human, levitate_params.npc_param_cache, NPC_MAX_ALTITUDE, NPC_LEVITATE_DURATION, NPC_HORIZONTAL_ACCELERATION, this_param, NPC_ASCEND_ACCELERATION, NPC_MAX_ASCEND_SPEED, NPC_HORIZONTAL_DEACCELERATION)
+        if levitate_params.npc_param_cache == nil then
+            levitate_params.npc_param_cache = create_levitate_param(NPC_MAX_ALTITUDE, NPC_LEVITATE_DURATION, NPC_HORIZONTAL_ACCELERATION, this_param, NPC_ASCEND_ACCELERATION, NPC_MAX_ASCEND_SPEED, NPC_HORIZONTAL_DEACCELERATION)
+        end
+        this_human["<LevitateCtrl>k__BackingField"]["Param"] = levitate_params.npc_param_cache
     end
-    print(levitate_params.player_param_cache)
     return rtval
 end)
 
@@ -403,8 +414,8 @@ end
 
 sdk.hook(sdk.find_type_definition("app.PauseManager"):get_method("requestPause(System.Boolean, app.PauseManager.PauseType, System.String, System.Action)"),
 function (args)
-    local bool = (sdk.to_int64(args[3]) & 1) == 1
-    if bool then
+    local pause = (sdk.to_int64(args[3]) & 1) == 1
+    if pause then
         timestamps.start_pause = os.clock()
     else
         local elapsed_pause_time = os.clock() - timestamps.start_pause
@@ -424,32 +435,34 @@ sdk.hook(sdk.find_type_definition("app.LevitateAction"):get_method("updateLevita
     end)
 
 
--- sdk.hook(sdk.find_type_definition("app.PlayerInputProcessor"):get_method("update()"),
--- function (args)
---     local this = sdk.to_managed_object(args[2])
---     local request = this["RequestDash"]
-
--- end)
+sdk.hook(sdk.find_type_definition("app.PlayerInputProcessor"):get_method("update()"),
+function (args)
+    local this = sdk.to_managed_object(args[2])
+    local request = this["RequestDash"]
+    if detectStateChange(request, state_holder, "previousRequestDash") then
+        if request and _player_human_common_action_ctrl["IsAirEvadeEnableInternal"] == false then
+            if state_holder.descend_mode then
+                _player_levitate_controller["UpDownMode"] = 3
+                levitate_params.player_param_cache["RiseAccel"] = ASCEND_ACCELERATION
+                levitate_params.player_param_cache["MaxRiseSpeed"] = MAX_ASCEND_SPEED
+                levitate_params.player_param_cache["MaxHeight"] = MAX_ALTITUDE
+                state_holder.descend_mode = false
+                print("descend mode", state_holder.descend_mode)
+            else
+                _player_levitate_controller["UpDownMode"] = 3
+                levitate_params.player_param_cache["RiseAccel"] = DESCEND_ACCELERATION
+                levitate_params.player_param_cache["MaxRiseSpeed"] = MAX_DESCEND_SPEED
+                levitate_params.player_param_cache["MaxHeight"] = MAX_ALTITUDE_DESCEND
+                state_holder.descend_mode = true
+                print("descend mode", state_holder.descend_mode)
+            end
+        end
+    end
+end)
 
 sdk.hook(sdk.find_type_definition("app.Player"):get_method("lateUpdate()"),
-    function (args)
-        -- if player_param_cache then
-        --     if _user_input["PadButtonUp"] == 4096 then
-        --         if b then
-        --             b = false
-        --         else
-        --             b = true
-        --         end
-        --     end
-        --     if b then
-        --         player_param_cache["RiseAccel"] = -6.0
-        --         player_param_cache["MaxRiseSpeed"] = -10.0
-        --     else
-        --         player_param_cache["RiseAccel"] = ASCEND_ACCELERATION
-        --         player_param_cache["MaxRiseSpeed"] = MAX_ASCEND_SPEED
-        --     end
-        -- end
-        resetReLevitateCost(_player_human_common_action_ctrl, timestamps.last_levitation_start) -- could do in requestLanding?
+    function ()
+        resetOnGround(_player_human_common_action_ctrl, timestamps.last_levitation_start) -- could do in requestLanding?
         updateEvasionFlag()
         updateOptFlySpeed(_player_levitate_controller, _manualPlayerHuman["MoveSpeedTypeValueInternal"], FLY_SPEED_MULTIPLIER)
         activateReLevitate(_player_levitate_controller, _player_human_common_action_ctrl, timestamps.last_levitation_start)
@@ -467,6 +480,7 @@ sdk.hook(sdk.find_type_definition("app.Pawn"):get_method("onLateUpdate()"),
     end)
 
 local function init_()
+    initTable(state_holder, false)
     _characterManager = nil
     _player_chara = nil
     _player_chara = GetManualPlayer()
