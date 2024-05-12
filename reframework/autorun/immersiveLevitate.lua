@@ -1,6 +1,6 @@
 -- author : BeerShigachi
--- date : 11 May 2024
--- version: 3.3.0
+-- date : 12 May 2024
+-- version: 3.3.1
 
 -- CONFIG:
 local MAX_ALTITUDE = 20.0 -- defalut 2.0
