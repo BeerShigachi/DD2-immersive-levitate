@@ -79,8 +79,8 @@ local state_holder = {
 }
 
 local levitate_params = {
-    player_param_cache = nil,
-    npc_param_cache = nil
+    player = nil,
+    npc = nil
 }
 
 local timestamps = {
@@ -291,8 +291,8 @@ end
 -- there were too many situations that player stands on a ground. so perhaps checking in update is the best option.
 local function resetOnGround(human_common_action_ctrl, last)
     if human_common_action_ctrl["IsAirEvadeEnableInternal"] and state_holder.descend_mode == true then
-        levitate_params.player_param_cache["RiseAccel"] = ASCEND_ACCELERATION
-        levitate_params.player_param_cache["MaxRiseSpeed"] = MAX_ASCEND_SPEED
+        levitate_params.player["RiseAccel"] = ASCEND_ACCELERATION
+        levitate_params.player["MaxRiseSpeed"] = MAX_ASCEND_SPEED
         state_holder.descend_mode = false
         print("descend_mode", state_holder.descend_mode)
     end
@@ -368,14 +368,17 @@ local function set_fall_param()
 end
 
 local function create_levitate_param(altidude, duration, horizontal_accel, origin, rise_accel, max_rise_speed, horizontal_deaccel)
-    origin:set_field("MaxHeight", altidude)
-    origin:set_field("MaxKeepSec", duration)
-    origin:set_field("HorizontalAccel", horizontal_accel)
-    origin:set_field("FallDeccel", FALL_DEACCELERATE)
-    origin:set_field("RiseAccel", rise_accel)
-    origin:set_field("MaxRiseSpeed", max_rise_speed)
-    origin:set_field("HorizontalDeccel", horizontal_deaccel)
-    return origin
+    local param = sdk.find_type_definition("app.LevitateController.Parameter"):create_instance():add_ref()
+    param:set_field("MaxHeight", altidude)
+    param:set_field("MaxKeepSec", duration)
+    param:set_field("HorizontalAccel", horizontal_accel)
+    param:set_field("FallDeccel", FALL_DEACCELERATE)
+    param:set_field("RiseAccel", rise_accel)
+    param:set_field("MaxRiseSpeed", max_rise_speed)
+    param:set_field("HorizontalDeccel", horizontal_deaccel)
+    param:set_field("HorizontalMaxSpeed", origin["HorizontalMaxSpeed"])
+    param:set_field("HorizontalSpeedRatio", origin["HorizontalSpeedRatio"])
+    return param
 end
 
 sdk.hook(sdk.find_type_definition("app.LevitateAction"):get_method("start(via.behaviortree.ActionArg)"),
@@ -387,15 +390,27 @@ function (rtval)
     local this_human = thread.get_hook_storage()["this"]["Human"]
     local this_param = this_human["<LevitateCtrl>k__BackingField"]["Param"]
     if this_human == _manualPlayerHuman then
-        if levitate_params.player_param_cache == nil then
-            levitate_params.player_param_cache = create_levitate_param(MAX_ALTITUDE, LEVITATE_DURATION, HORIZONTAL_ACCELERATION, this_param, ASCEND_ACCELERATION, MAX_ASCEND_SPEED, HORIZONTAL_DEACCELERATION)
+        if levitate_params.player == nil then
+            levitate_params.player = create_levitate_param(MAX_ALTITUDE,
+                                                            LEVITATE_DURATION,
+                                                            HORIZONTAL_ACCELERATION,
+                                                            this_param,
+                                                            ASCEND_ACCELERATION,
+                                                            MAX_ASCEND_SPEED,
+                                                            HORIZONTAL_DEACCELERATION)
         end
-        this_human["<LevitateCtrl>k__BackingField"]["Param"] = levitate_params.player_param_cache
+        this_human["<LevitateCtrl>k__BackingField"]["Param"] = levitate_params.player
     else
-        if levitate_params.npc_param_cache == nil then
-            levitate_params.npc_param_cache = create_levitate_param(NPC_MAX_ALTITUDE, NPC_LEVITATE_DURATION, NPC_HORIZONTAL_ACCELERATION, this_param, NPC_ASCEND_ACCELERATION, NPC_MAX_ASCEND_SPEED, NPC_HORIZONTAL_DEACCELERATION)
+        if levitate_params.npc == nil then
+            levitate_params.npc = create_levitate_param(NPC_MAX_ALTITUDE,
+                                                        NPC_LEVITATE_DURATION,
+                                                        NPC_HORIZONTAL_ACCELERATION,
+                                                        this_param,
+                                                        NPC_ASCEND_ACCELERATION,
+                                                        NPC_MAX_ASCEND_SPEED,
+                                                        NPC_HORIZONTAL_DEACCELERATION)
         end
-        this_human["<LevitateCtrl>k__BackingField"]["Param"] = levitate_params.npc_param_cache
+        this_human["<LevitateCtrl>k__BackingField"]["Param"] = levitate_params.npc
     end
     return rtval
 end)
@@ -443,16 +458,16 @@ function (args)
         if request and _player_human_common_action_ctrl["IsAirEvadeEnableInternal"] == false then
             if state_holder.descend_mode then
                 _player_levitate_controller["UpDownMode"] = 3
-                levitate_params.player_param_cache["RiseAccel"] = ASCEND_ACCELERATION
-                levitate_params.player_param_cache["MaxRiseSpeed"] = MAX_ASCEND_SPEED
-                levitate_params.player_param_cache["MaxHeight"] = MAX_ALTITUDE
+                levitate_params.player["RiseAccel"] = ASCEND_ACCELERATION
+                levitate_params.player["MaxRiseSpeed"] = MAX_ASCEND_SPEED
+                levitate_params.player["MaxHeight"] = MAX_ALTITUDE
                 state_holder.descend_mode = false
                 print("descend mode", state_holder.descend_mode)
             else
                 _player_levitate_controller["UpDownMode"] = 3
-                levitate_params.player_param_cache["RiseAccel"] = DESCEND_ACCELERATION
-                levitate_params.player_param_cache["MaxRiseSpeed"] = MAX_DESCEND_SPEED
-                levitate_params.player_param_cache["MaxHeight"] = MAX_ALTITUDE_DESCEND
+                levitate_params.player["RiseAccel"] = DESCEND_ACCELERATION
+                levitate_params.player["MaxRiseSpeed"] = MAX_DESCEND_SPEED
+                levitate_params.player["MaxHeight"] = MAX_ALTITUDE_DESCEND
                 state_holder.descend_mode = true
                 print("descend mode", state_holder.descend_mode)
             end
