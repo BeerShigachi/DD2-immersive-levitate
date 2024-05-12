@@ -293,6 +293,7 @@ local function resetOnGround(human_common_action_ctrl, last)
     if human_common_action_ctrl["IsAirEvadeEnableInternal"] and state_holder.descend_mode == true then
         levitate_params.player["RiseAccel"] = ASCEND_ACCELERATION
         levitate_params.player["MaxRiseSpeed"] = MAX_ASCEND_SPEED
+        levitate_params.player["MaxHeight"] = MAX_ALTITUDE
         state_holder.descend_mode = false
         print("descend_mode", state_holder.descend_mode)
     end
@@ -380,6 +381,7 @@ local function create_levitate_param(altidude, duration, horizontal_accel, origi
     param:set_field("HorizontalSpeedRatio", origin["HorizontalSpeedRatio"])
     return param
 end
+
 
 sdk.hook(sdk.find_type_definition("app.LevitateAction"):get_method("start(via.behaviortree.ActionArg)"),
 function (args)
