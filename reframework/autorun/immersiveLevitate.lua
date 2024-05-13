@@ -1,5 +1,5 @@
 -- author : BeerShigachi
--- date : 12 May 2024
+-- date : 13 May 2024
 -- version: 3.3.1
 
 -- CONFIG:
@@ -368,20 +368,6 @@ local function set_fall_param()
     end
 end
 
-local function create_levitate_param(altidude, duration, horizontal_accel, origin, rise_accel, max_rise_speed, horizontal_deaccel)
-    local param = sdk.find_type_definition("app.LevitateController.Parameter"):create_instance():add_ref()
-    param:set_field("MaxHeight", altidude)
-    param:set_field("MaxKeepSec", duration)
-    param:set_field("HorizontalAccel", horizontal_accel)
-    param:set_field("FallDeccel", FALL_DEACCELERATE)
-    param:set_field("RiseAccel", rise_accel)
-    param:set_field("MaxRiseSpeed", max_rise_speed)
-    param:set_field("HorizontalDeccel", horizontal_deaccel)
-    param:set_field("HorizontalMaxSpeed", origin["HorizontalMaxSpeed"])
-    param:set_field("HorizontalSpeedRatio", origin["HorizontalSpeedRatio"])
-    return param
-end
-
 
 sdk.hook(sdk.find_type_definition("app.LevitateAction"):get_method("start(via.behaviortree.ActionArg)"),
 function (args)
@@ -393,24 +379,30 @@ function (rtval)
     local this_param = this_human["<LevitateCtrl>k__BackingField"]["Param"]
     if this_human == _manualPlayerHuman then
         if levitate_params.player == nil then
-            levitate_params.player = create_levitate_param(MAX_ALTITUDE,
-                                                            LEVITATE_DURATION,
-                                                            HORIZONTAL_ACCELERATION,
-                                                            this_param,
-                                                            ASCEND_ACCELERATION,
-                                                            MAX_ASCEND_SPEED,
-                                                            HORIZONTAL_DEACCELERATION)
+            levitate_params.player = sdk.create_instance("app.LevitateController.Parameter"):add_ref()
+            levitate_params.player["HorizontalMaxSpeed"] = this_param["HorizontalMaxSpeed"]
+            levitate_params.player["HorizontalSpeedRatio"] = this_param["HorizontalSpeedRatio"]
+            levitate_params.player["MaxHeight"] = MAX_ALTITUDE
+            levitate_params.player["MaxKeepSec"] = LEVITATE_DURATION
+            levitate_params.player["HorizontalAccel"] = HORIZONTAL_ACCELERATION
+            levitate_params.player["FallDeccel"] = FALL_DEACCELERATE
+            levitate_params.player["RiseAccel"] = ASCEND_ACCELERATION
+            levitate_params.player["MaxRiseSpeed"] = MAX_ASCEND_SPEED
+            levitate_params.player["HorizontalDeccel"] = HORIZONTAL_DEACCELERATION
         end
         this_human["<LevitateCtrl>k__BackingField"]["Param"] = levitate_params.player
     else
         if levitate_params.npc == nil then
-            levitate_params.npc = create_levitate_param(NPC_MAX_ALTITUDE,
-                                                        NPC_LEVITATE_DURATION,
-                                                        NPC_HORIZONTAL_ACCELERATION,
-                                                        this_param,
-                                                        NPC_ASCEND_ACCELERATION,
-                                                        NPC_MAX_ASCEND_SPEED,
-                                                        NPC_HORIZONTAL_DEACCELERATION)
+            levitate_params.npc = sdk.create_instance("app.LevitateController.Parameter"):add_ref()
+            levitate_params.npc["HorizontalMaxSpeed"] = this_param["HorizontalMaxSpeed"]
+            levitate_params.npc["HorizontalSpeedRatio"] = this_param["HorizontalSpeedRatio"]
+            levitate_params.npc["MaxHeight"] = NPC_MAX_ALTITUDE
+            levitate_params.npc["MaxKeepSec"] = NPC_LEVITATE_DURATION
+            levitate_params.npc["HorizontalAccel"] = NPC_HORIZONTAL_ACCELERATION
+            levitate_params.npc["FallDeccel"] = FALL_DEACCELERATE
+            levitate_params.npc["RiseAccel"] = NPC_ASCEND_ACCELERATION
+            levitate_params.npc["MaxRiseSpeed"] = NPC_MAX_ASCEND_SPEED
+            levitate_params.npc["HorizontalDeccel"] = NPC_HORIZONTAL_DEACCELERATION
         end
         this_human["<LevitateCtrl>k__BackingField"]["Param"] = levitate_params.npc
     end
