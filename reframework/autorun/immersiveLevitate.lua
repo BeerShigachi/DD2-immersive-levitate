@@ -55,6 +55,11 @@ local NPC_HORIZONTAL_DEACCELERATION = 3.8 -- default 3.8
 
 
 -- DO NOT TOUCH AFTER THIS LINE.
+
+if reframework.get_commit_count() < 1644 then
+	re.msg("ImmersiveLevitate: Your REFramework is older version.\n If the mod does not work, Get version `REF Nightly 913` from\nhttps://github.com/praydog/REFramework-nightly/releases")
+end
+
 if RE_LEVITATE_INTERVAL > LEVITATE_DURATION then
     RE_LEVITATE_INTERVAL = LEVITATE_DURATION
 end
@@ -76,12 +81,12 @@ local state_holder = {
     descend_mode = false,
     cacheIsAirEvadeEnableInternal = false,
     is_active_fall_guard = false,
-    has_init_levitate_param_player = false,
     has_init_levitate_param_npc = false
 }
 
--- is that a fragmemtation upon previous unpredict process termination? nil out ref just in case.
-local levitate_param_player = sdk.create_instance("app.LevitateController.Parameter"):add_ref()
+-- is that a fragmemtation upon previous unexpected process termination which cause deadlock?
+-- local levitate_param_player = sdk.create_instance("app.LevitateController.Parameter"):add_ref()
+local levitate_param_player
 local levitate_param_npc = sdk.create_instance("app.LevitateController.Parameter"):add_ref()
 
 local timestamps = {
@@ -381,19 +386,17 @@ function (rtval)
     local this_human = this["Human"]
     local this_param = this_human["<LevitateCtrl>k__BackingField"]["Param"]
     if this_human == _manualPlayerHuman then
-        if state_holder.has_init_levitate_param_player == false then
-            state_holder.has_init_levitate_param_player = true
-            levitate_param_player["HorizontalMaxSpeed"] = this_param["HorizontalMaxSpeed"]
-            levitate_param_player["HorizontalSpeedRatio"] = this_param["HorizontalSpeedRatio"]
-            levitate_param_player["MaxHeight"] = MAX_ALTITUDE
-            levitate_param_player["MaxKeepSec"] = LEVITATE_DURATION
-            levitate_param_player["HorizontalAccel"] = HORIZONTAL_ACCELERATION
-            levitate_param_player["FallDeccel"] = FALL_DEACCELERATE
-            levitate_param_player["RiseAccel"] = ASCEND_ACCELERATION
-            levitate_param_player["MaxRiseSpeed"] = MAX_ASCEND_SPEED
-            levitate_param_player["HorizontalDeccel"] = HORIZONTAL_DEACCELERATION
+        if levitate_param_player == nil then
+            this_param["MaxHeight"] = MAX_ALTITUDE
+            this_param["MaxKeepSec"] = LEVITATE_DURATION
+            this_param["HorizontalAccel"] = HORIZONTAL_ACCELERATION
+            this_param["FallDeccel"] = FALL_DEACCELERATE
+            this_param["RiseAccel"] = ASCEND_ACCELERATION
+            this_param["MaxRiseSpeed"] = MAX_ASCEND_SPEED
+            this_param["HorizontalDeccel"] = HORIZONTAL_DEACCELERATION
+            levitate_param_player = this_param
         end
-        this_human["<LevitateCtrl>k__BackingField"]["Param"] = levitate_param_player
+        -- this_human["<LevitateCtrl>k__BackingField"]["Param"] = levitate_param_player
     else
         if state_holder.has_init_levitate_param_npc == false then
             state_holder.has_init_levitate_param_npc = true
@@ -494,6 +497,7 @@ sdk.hook(sdk.find_type_definition("app.Pawn"):get_method("onLateUpdate()"),
 local function init_()
     initTable(state_holder, false)
     initTable(timestamps, os.clock())
+    levitate_param_player = nil
     _characterManager = nil
     _player_chara = nil
     _player_chara = GetManualPlayer()
