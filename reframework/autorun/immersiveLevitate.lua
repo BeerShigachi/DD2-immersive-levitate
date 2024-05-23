@@ -3,54 +3,63 @@
 -- version: 3.3.2
 
 -- CONFIG:
-local MAX_ALTITUDE = 20.0 -- defalut 2.0
-local MAX_ALTITUDE_DESCEND = 40.0 -- the height you can descend at once when descending mode.
-local LEVITATE_DURATION = 10.0 -- default 2.8
-local FLY_SPEED_MULTIPLIER = 2.0 -- set 1.0 for default speed
-local HORIZONTAL_ACCELERATION = 3.0 -- default 3.0
-local ASCEND_ACCELERATION = 6.0 -- default 4.0
-local MAX_ASCEND_SPEED = 10.0 -- defalut 5.0 CAUTION: set this value high without setting ASCEND_ACCELERATION very high results slow speed.
-local DESCEND_ACCELERATION = 6.0 -- opposite of  ASCEND_ACCELERATION
-local MAX_DESCEND_SPEED = 10.0 -- opposite of MAX_ASCEND_SPEED
-local HORIZONTAL_DEACCELERATION = 3.8 -- default 3.8
-local LEVITATE_STAMINA_MULTIPLIER = 0.0005
-local ASCEND_STAMINA_MULTIPLIER = 3.0
-local RE_LEVITATE_INTERVAL = 10.0 -- set lower value like 0.5(so double tap to cancel levitate) if you dont want to flying too fast by spamming jump bottun.
-local DISABLE_STAMINA_COST = false
-local FALL_DEACCELERATE = 2000.0
-local START_FALL_ANIMATION_FRAME_COUNT = 500.0
 
---[[
-Stamina system for re-levitate. 
-"Air sprint" means spamming re-levitate within AIR_SPRINT_THRESHOLD.
-When you air sprint continuously, the cost of air sprint keeps growing (in a geometric sequence).
-RE_LEVITATE_COST is used as base cost for this. To reset the cost, stop air sprinting or land on a terrain.
-e.g. Let RE_LEVITATE_COST is 20.0 and COMMON_RATIO is 2.0 then the cost of air sprint grows 20.0 -> 40.0 -> 80.0 -> 160.0
-set RE_LEVITATE_COST = 0.0 or AIR_SPRINT_THRESHOLD = 0.0 to diable re-levitate stamina system.
---]]
-local AIR_SPRINT_THRESHOLD = 2.0 -- if you re-levitate before x sec pass it is considered as air sprinting.
-local RE_LEVITATE_COST = 50.0 -- cost for re-levitate(non air sprint). used as the scale factor in a geometric sequence as well.
-local COST_ONLY_AIR_SPRINT = false -- set false to enable stamina cost on non air sprinting re-levitate as well.
-local COMMON_RATIO = 1.4 -- higher value to grow the cost quicker. the value between non zero positive(or less than -1.0) to less than 1.0 shrink the cost(who wants that?) 
-local SIMPLIFIED = false -- set true to fix RE_LEVITATE_COST i.e. the cost of air sprint won't grow. equivalent to COMMON_RATIO = 1.0
-local SAFE_AIR_SPRINT = true -- set true to block (only)air sprint automatically when insufficient stamina remains.
+local config = {
+    MAX_ALTITUDE = 20.0, -- defalut 2.0
+    MAX_ALTITUDE_DESCEND = 40.0, -- the height you can descend at once when descending mode.
+    LEVITATE_DURATION = 10.0, -- default 2.8
+    FLY_SPEED_MULTIPLIER = 2.0, -- set 1.0 for default speed
+    HORIZONTAL_ACCELERATION = 3.0, -- default 3.0
+    ASCEND_ACCELERATION = 6.0, -- default 4.0
+    MAX_ASCEND_SPEED = 10.0, -- defalut 5.0 CAUTION: set this value high without setting ASCEND_ACCELERATION very high results slow speed.
+    DESCEND_ACCELERATION = 6.0, -- opposite of  ASCEND_ACCELERATION
+    MAX_DESCEND_SPEED = 10.0, -- opposite of MAX_ASCEND_SPEED
+    HORIZONTAL_DEACCELERATION = 3.8, -- default 3.8
+    LEVITATE_STAMINA_MULTIPLIER = 0.0005,
+    ASCEND_STAMINA_MULTIPLIER = 3.0,
+    RE_LEVITATE_INTERVAL = 10.0, -- set lower value like 0.5(so double tap to cancel levitate) if you dont want to flying too fast by spamming jump bottun.
+    DISABLE_STAMINA_COST = false,
+    FALL_DEACCELERATE = 2000.0,
+    START_FALL_ANIMATION_FRAME_COUNT = 500.0,
+    --[[
+        Stamina system for re-levitate. 
+        "Air sprint" means spamming re-levitate within AIR_SPRINT_THRESHOLD.
+        When you air sprint continuously, the cost of air sprint keeps growing (in a geometric sequence).
+        RE_LEVITATE_COST is used as base cost for this. To reset the cost, stop air sprinting or land on a terrain.
+        e.g. Let RE_LEVITATE_COST is 20.0 and COMMON_RATIO is 2.0 then the cost of air sprint grows 20.0 -> 40.0 -> 80.0 -> 160.0
+        set RE_LEVITATE_COST = 0.0 or AIR_SPRINT_THRESHOLD = 0.0 to diable re-levitate stamina system.
+    --]]
+    AIR_SPRINT_THRESHOLD = 2.0, -- if you re-levitate before x sec pass it is considered as air sprinting.
+    RE_LEVITATE_COST = 50.0, -- cost for re-levitate(non air sprint). used as the scale factor in a geometric sequence as well.
+    COST_ONLY_AIR_SPRINT = false, -- set false to enable stamina cost on non air sprinting re-levitate as well.
+    COMMON_RATIO = 1.4, -- higher value to grow the cost quicker. the value between non zero positive(or less than -1.0) to less than 1.0 shrink the cost(who wants that?) 
+    SIMPLIFIED = false, -- set true to fix RE_LEVITATE_COST i.e. the cost of air sprint won't grow. equivalent to COMMON_RATIO = 1.0
+    SAFE_AIR_SPRINT = true, -- set true to block (only)air sprint automatically when insufficient stamina remains.
+    --[[ 
+        Only to interrupt spamming re-levitate. Recommend to use either this or stamina system for re-levitate.
+        This can be used with re-levitation stamina system but a bit complecated to find a good balance and can be broken when set wrong
+        If you use this with re-levitation stamina system the valeus have to be `SPAM_RE_LEVITATE_COOLDOWN < AIR_SPRINT_THRESHOLD`
+        e.g. SPAM_RE_LEVITATE_COOLDOWN = 0.5, AIR_SPRINT_THRESHOLD = 2.0
+    --]]
+    SPAM_RE_LEVITATE_COOLDOWN = 0.0 -- set 0.0 to disable 
+}
 
---[[ 
-Only to interrupt spamming re-levitate. Recommend to use either this or stamina system for re-levitate.
-This can be used with re-levitation stamina system but a bit complecated to find a good balance and can be broken when set wrong
-If you use this with re-levitation stamina system the valeus have to be `SPAM_RE_LEVITATE_COOLDOWN < AIR_SPRINT_THRESHOLD`
-e.g. SPAM_RE_LEVITATE_COOLDOWN = 0.5, AIR_SPRINT_THRESHOLD = 2.0
---]]
-local SPAM_RE_LEVITATE_COOLDOWN = 0.0 -- set 0.0 to disable 
 
--- NPCs who can levitate seems like only pawns anyway.
-local NPC_MAX_ALTITUDE = 4.0 -- default 2.0
-local NPC_LEVITATE_DURATION = 6.0 -- defalut 2.8
-local PAWN_FLY_SPEED_MULTIPLIER = 2.0 -- default 1.0
-local NPC_HORIZONTAL_ACCELERATION = 3.0 -- defalut 3.0
-local NPC_ASCEND_ACCELERATION = 4.0 -- default 4.0
-local NPC_MAX_ASCEND_SPEED = 5.0 -- defalut 5.0
-local NPC_HORIZONTAL_DEACCELERATION = 3.8 -- default 3.8
+local config_npc = {
+    -- NPCs who can levitate seems like only pawns anyway.
+    NPC_MAX_ALTITUDE = 4.0, -- default 2.0
+    NPC_LEVITATE_DURATION = 6.0, -- defalut 2.8
+    PAWN_FLY_SPEED_MULTIPLIER = 2.0, -- default 1.0
+    NPC_HORIZONTAL_ACCELERATION = 3.0, -- defalut 3.0
+    NPC_ASCEND_ACCELERATION = 4.0, -- default 4.0
+    NPC_MAX_ASCEND_SPEED = 5.0, -- defalut 5.0
+    NPC_HORIZONTAL_DEACCELERATION = 3.8, -- default 3.8
+}
+
+
+
+
+
 
 
 
@@ -60,8 +69,8 @@ if reframework.get_commit_count() < 1644 then
 	re.msg("ImmersiveLevitate: Your REFramework is older version.\n If the mod does not work, Get version `REF Nightly 913` from\nhttps://github.com/praydog/REFramework-nightly/releases")
 end
 
-if RE_LEVITATE_INTERVAL > LEVITATE_DURATION then
-    RE_LEVITATE_INTERVAL = LEVITATE_DURATION
+if RE_LEVITATE_INTERVAL > config.LEVITATE_DURATION then
+    RE_LEVITATE_INTERVAL = config.LEVITATE_DURATION
 end
 
 if DESCEND_ACCELERATION > 0 then
@@ -263,23 +272,23 @@ function (args)
     end
 end)
 
-local scale_factor = RE_LEVITATE_COST
-local r = COMMON_RATIO
-if SIMPLIFIED then
+local scale_factor = config.RE_LEVITATE_COST
+local r = config.COMMON_RATIO
+if config.SIMPLIFIED then
     r = 1.0
 end
 local function expendStaminaToReLevitate(stamina_manager, last)
-    if os.clock() - last < AIR_SPRINT_THRESHOLD and state_holder.cacheIsAirEvadeEnableInternal == false then
+    if os.clock() - last < config.AIR_SPRINT_THRESHOLD and state_holder.cacheIsAirEvadeEnableInternal == false then
         stamina_manager:add(scale_factor * -1.0, false)
         scale_factor = scale_factor * r
         local remains = stamina_manager:get_RemainingAmount()
-        if SAFE_AIR_SPRINT and remains <= scale_factor  then
+        if config.SAFE_AIR_SPRINT and remains <= scale_factor  then
             _block_levitate = true
         end
     else
         -- reset the base first
-        scale_factor = RE_LEVITATE_COST
-        if not COST_ONLY_AIR_SPRINT and state_holder.cacheIsAirEvadeEnableInternal == false then
+        scale_factor = config.RE_LEVITATE_COST
+        if not config.COST_ONLY_AIR_SPRINT and state_holder.cacheIsAirEvadeEnableInternal == false then
             print("cost normal re-levitate as well")
             stamina_manager:add(scale_factor * -1.0, false)
         end
@@ -290,30 +299,30 @@ local function activateReLevitate(levitate_controller, human_common_action_ctrl,
     local levitating = levitate_controller:get_IsActive()
     local timer = levitate_controller:get_field("TotalTimer")
     if timer < RE_LEVITATE_INTERVAL and levitating then return end
-    if os.clock() - last < SPAM_RE_LEVITATE_COOLDOWN or _block_levitate then return end
+    if os.clock() - last < config.SPAM_RE_LEVITATE_COOLDOWN or _block_levitate then return end
     human_common_action_ctrl:set_field("<IsEnableLevitate>k__BackingField", true)
 end
 
 -- there were too many situations that player stands on a ground. so perhaps checking in update is the best option.
 local function resetOnGround(human_common_action_ctrl, last)
     if human_common_action_ctrl["IsAirEvadeEnableInternal"] and state_holder.descend_mode == true then
-        levitate_param_player["RiseAccel"] = ASCEND_ACCELERATION
-        levitate_param_player["MaxRiseSpeed"] = MAX_ASCEND_SPEED
-        levitate_param_player["MaxHeight"] = MAX_ALTITUDE
+        levitate_param_player["RiseAccel"] = config.ASCEND_ACCELERATION
+        levitate_param_player["MaxRiseSpeed"] = config.MAX_ASCEND_SPEED
+        levitate_param_player["MaxHeight"] = config.MAX_ALTITUDE
         state_holder.descend_mode = false
         print("descend_mode", state_holder.descend_mode)
     end
-    if human_common_action_ctrl["IsAirEvadeEnableInternal"] and scale_factor ~= RE_LEVITATE_COST then
-        scale_factor = RE_LEVITATE_COST
+    if human_common_action_ctrl["IsAirEvadeEnableInternal"] and scale_factor ~= config.RE_LEVITATE_COST then
+        scale_factor = config.RE_LEVITATE_COST
         _block_levitate = false
-    elseif not human_common_action_ctrl["IsAirEvadeEnableInternal"] and os.clock() - last > AIR_SPRINT_THRESHOLD then
+    elseif not human_common_action_ctrl["IsAirEvadeEnableInternal"] and os.clock() - last > config.AIR_SPRINT_THRESHOLD then
         _block_levitate = false
     end
 end
 
 local function expendStaminaTolevitate(levitate_controller, stamina_manager)
     local max_stamina = stamina_manager:get_MaxValue()
-    local cost = max_stamina * LEVITATE_STAMINA_MULTIPLIER * -1.0
+    local cost = max_stamina * config.LEVITATE_STAMINA_MULTIPLIER * -1.0
     local remains = stamina_manager:get_RemainingAmount()
     if remains <= 0.0 then
         levitate_controller:set_field("<IsActive>k__BackingField", false)
@@ -321,7 +330,7 @@ local function expendStaminaTolevitate(levitate_controller, stamina_manager)
         return
     end
     if levitate_controller:get_IsRise() then
-        stamina_manager:add(cost * ASCEND_STAMINA_MULTIPLIER, false)
+        stamina_manager:add(cost * config.ASCEND_STAMINA_MULTIPLIER, false)
     else
         stamina_manager:add(cost, false)
     end
@@ -370,7 +379,7 @@ end
 local function set_fall_param()
     local fall_param = GetFallParam()
     if fall_param then
-        fall_param:set_field("InterpFrameHighFall", START_FALL_ANIMATION_FRAME_COUNT)
+        fall_param:set_field("InterpFrameHighFall", config.START_FALL_ANIMATION_FRAME_COUNT)
     end
 end
 
@@ -387,13 +396,13 @@ function (rtval)
     local this_param = this_human["<LevitateCtrl>k__BackingField"]["Param"]
     if this_human == _manualPlayerHuman then
         if levitate_param_player == nil then
-            this_param["MaxHeight"] = MAX_ALTITUDE
-            this_param["MaxKeepSec"] = LEVITATE_DURATION
-            this_param["HorizontalAccel"] = HORIZONTAL_ACCELERATION
-            this_param["FallDeccel"] = FALL_DEACCELERATE
-            this_param["RiseAccel"] = ASCEND_ACCELERATION
-            this_param["MaxRiseSpeed"] = MAX_ASCEND_SPEED
-            this_param["HorizontalDeccel"] = HORIZONTAL_DEACCELERATION
+            this_param["MaxHeight"] = config.MAX_ALTITUDE
+            this_param["MaxKeepSec"] = config.LEVITATE_DURATION
+            this_param["HorizontalAccel"] = config.HORIZONTAL_ACCELERATION
+            this_param["FallDeccel"] = config.FALL_DEACCELERATE
+            this_param["RiseAccel"] = config.ASCEND_ACCELERATION
+            this_param["MaxRiseSpeed"] = config.MAX_ASCEND_SPEED
+            this_param["HorizontalDeccel"] = config.HORIZONTAL_DEACCELERATION
             levitate_param_player = this_param
         end
         -- this_human["<LevitateCtrl>k__BackingField"]["Param"] = levitate_param_player
@@ -402,13 +411,13 @@ function (rtval)
             state_holder.has_init_levitate_param_npc = true
             levitate_param_npc["HorizontalMaxSpeed"] = this_param["HorizontalMaxSpeed"]
             levitate_param_npc["HorizontalSpeedRatio"] = this_param["HorizontalSpeedRatio"]
-            levitate_param_npc["MaxHeight"] = NPC_MAX_ALTITUDE
-            levitate_param_npc["MaxKeepSec"] = NPC_LEVITATE_DURATION
-            levitate_param_npc["HorizontalAccel"] = NPC_HORIZONTAL_ACCELERATION
-            levitate_param_npc["FallDeccel"] = FALL_DEACCELERATE
-            levitate_param_npc["RiseAccel"] = NPC_ASCEND_ACCELERATION
-            levitate_param_npc["MaxRiseSpeed"] = NPC_MAX_ASCEND_SPEED
-            levitate_param_npc["HorizontalDeccel"] = NPC_HORIZONTAL_DEACCELERATION
+            levitate_param_npc["MaxHeight"] = config_npc.NPC_MAX_ALTITUDE
+            levitate_param_npc["MaxKeepSec"] = config_npc.NPC_LEVITATE_DURATION
+            levitate_param_npc["HorizontalAccel"] = config_npc.NPC_HORIZONTAL_ACCELERATION
+            levitate_param_npc["FallDeccel"] = config.FALL_DEACCELERATE
+            levitate_param_npc["RiseAccel"] = config_npc.NPC_ASCEND_ACCELERATION
+            levitate_param_npc["MaxRiseSpeed"] = config_npc.NPC_MAX_ASCEND_SPEED
+            levitate_param_npc["HorizontalDeccel"] = config_npc.NPC_HORIZONTAL_DEACCELERATION
         end
         this_human["<LevitateCtrl>k__BackingField"]["Param"] = levitate_param_npc
     end
@@ -440,7 +449,7 @@ end)
 
 sdk.hook(sdk.find_type_definition("app.LevitateAction"):get_method("updateLevitate()"),
     function (args)
-        if DISABLE_STAMINA_COST then return end
+        if config.DISABLE_STAMINA_COST then return end
         local this_human = sdk.to_managed_object(args[2])["Human"]
         if this_human == _manualPlayerHuman then
             if _player_levitate_controller and _player_stamina_manager then
@@ -458,16 +467,16 @@ function (args)
         if request and _player_human_common_action_ctrl["IsAirEvadeEnableInternal"] == false then
             if state_holder.descend_mode then
                 _player_levitate_controller["UpDownMode"] = 3
-                levitate_param_player["RiseAccel"] = ASCEND_ACCELERATION
-                levitate_param_player["MaxRiseSpeed"] = MAX_ASCEND_SPEED
-                levitate_param_player["MaxHeight"] = MAX_ALTITUDE
+                levitate_param_player["RiseAccel"] = config.ASCEND_ACCELERATION
+                levitate_param_player["MaxRiseSpeed"] = config.MAX_ASCEND_SPEED
+                levitate_param_player["MaxHeight"] = config.MAX_ALTITUDE
                 state_holder.descend_mode = false
                 print("descend mode", state_holder.descend_mode)
             else
                 _player_levitate_controller["UpDownMode"] = 3
                 levitate_param_player["RiseAccel"] = DESCEND_ACCELERATION
                 levitate_param_player["MaxRiseSpeed"] = MAX_DESCEND_SPEED
-                levitate_param_player["MaxHeight"] = MAX_ALTITUDE_DESCEND
+                levitate_param_player["MaxHeight"] = config.MAX_ALTITUDE_DESCEND
                 state_holder.descend_mode = true
                 print("descend mode", state_holder.descend_mode)
             end
@@ -479,7 +488,7 @@ sdk.hook(sdk.find_type_definition("app.Player"):get_method("lateUpdate()"),
     function ()
         resetOnGround(_player_human_common_action_ctrl, timestamps.last_levitation_start) -- could do in requestLanding?
         updateEvasionFlag()
-        updateOptFlySpeed(_player_levitate_controller, _manualPlayerHuman["MoveSpeedTypeValueInternal"], FLY_SPEED_MULTIPLIER)
+        updateOptFlySpeed(_player_levitate_controller, _manualPlayerHuman["MoveSpeedTypeValueInternal"], config.FLY_SPEED_MULTIPLIER)
         activateReLevitate(_player_levitate_controller, _player_human_common_action_ctrl, timestamps.last_levitation_start)
     end)
 
@@ -491,7 +500,7 @@ sdk.hook(sdk.find_type_definition("app.Pawn"):get_method("onLateUpdate()"),
         --     print(this_pawn_human:get_HumanCommonActionCtrl(), "not able to re levitate now")
         --     this_pawn_human:get_HumanCommonActionCtrl():set_field("<IsEnableLevitate>k__BackingField", true)
         -- end
-        updateOptFlySpeed(this_pawn_human:get_LevitateCtrl(), this_pawn_human["MoveSpeedTypeValueInternal"], PAWN_FLY_SPEED_MULTIPLIER)
+        updateOptFlySpeed(this_pawn_human:get_LevitateCtrl(), this_pawn_human["MoveSpeedTypeValueInternal"], config_npc.PAWN_FLY_SPEED_MULTIPLIER)
     end)
 
 local function init_()
