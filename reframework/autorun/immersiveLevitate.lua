@@ -81,8 +81,6 @@ if MAX_DESCEND_SPEED > 0 then
     MAX_DESCEND_SPEED = MAX_DESCEND_SPEED * -1
 end
 
-local re = re
-local sdk = sdk
 local _block_levitate = false
 
 local state_holder = {
