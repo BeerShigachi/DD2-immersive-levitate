@@ -57,28 +57,20 @@ local config_npc = {
 }
 
 
-
-
-
-
-
-
--- DO NOT TOUCH AFTER THIS LINE.
-
 if reframework.get_commit_count() < 1644 then
 	re.msg("ImmersiveLevitate: Your REFramework is older version.\n If the mod does not work, Get version `REF Nightly 913` from\nhttps://github.com/praydog/REFramework-nightly/releases")
 end
 
-if RE_LEVITATE_INTERVAL > config.LEVITATE_DURATION then
-    RE_LEVITATE_INTERVAL = config.LEVITATE_DURATION
+if config.RE_LEVITATE_INTERVAL > config.LEVITATE_DURATION then
+    config.RE_LEVITATE_INTERVAL = config.LEVITATE_DURATION
 end
 
-if DESCEND_ACCELERATION > 0 then
-    DESCEND_ACCELERATION = DESCEND_ACCELERATION * -1
+if config.DESCEND_ACCELERATION > 0 then
+    config.DESCEND_ACCELERATION = config.DESCEND_ACCELERATION * -1
 end
 
-if MAX_DESCEND_SPEED > 0 then
-    MAX_DESCEND_SPEED = MAX_DESCEND_SPEED * -1
+if config.MAX_DESCEND_SPEED > 0 then
+    config.MAX_DESCEND_SPEED = config.MAX_DESCEND_SPEED * -1
 end
 
 local _block_levitate = false
@@ -296,7 +288,7 @@ end
 local function activateReLevitate(levitate_controller, human_common_action_ctrl, last)
     local levitating = levitate_controller:get_IsActive()
     local timer = levitate_controller:get_field("TotalTimer")
-    if timer < RE_LEVITATE_INTERVAL and levitating then return end
+    if timer < config.RE_LEVITATE_INTERVAL and levitating then return end
     if os.clock() - last < config.SPAM_RE_LEVITATE_COOLDOWN or _block_levitate then return end
     human_common_action_ctrl:set_field("<IsEnableLevitate>k__BackingField", true)
 end
@@ -472,8 +464,8 @@ function (args)
                 print("descend mode", state_holder.descend_mode)
             else
                 _player_levitate_controller["UpDownMode"] = 3
-                levitate_param_player["RiseAccel"] = DESCEND_ACCELERATION
-                levitate_param_player["MaxRiseSpeed"] = MAX_DESCEND_SPEED
+                levitate_param_player["RiseAccel"] = config.DESCEND_ACCELERATION
+                levitate_param_player["MaxRiseSpeed"] = config.MAX_DESCEND_SPEED
                 levitate_param_player["MaxHeight"] = config.MAX_ALTITUDE_DESCEND
                 state_holder.descend_mode = true
                 print("descend mode", state_holder.descend_mode)
