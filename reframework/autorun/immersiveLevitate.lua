@@ -1,8 +1,12 @@
 -- author : BeerShigachi
--- date : 14 May 2024
--- version: 3.3.2
+-- date : 25 May 2024
+-- version: 3.4.0
 
--- CONFIG:
+
+local MANEUVER_CONFIG_PATH = "ImmersiveLevitate\\maneuver.json"
+local STAMINA_CONFIG_PATH = "ImmersiveLevitate\\stamina.json"
+local AIR_SPRINT_CONFIG_PATH = "ImmersiveLevitate\\air_sprint.json"
+local NPC_CONFIG_PATH = "ImmersiveLevitate\\npc.json"
 
 local config_maneuver = {
     MAX_ALTITUDE = 20.0, -- defalut 2.0
@@ -20,10 +24,31 @@ local config_maneuver = {
     RE_LEVITATE_INTERVAL = 10.0 -- set lower value like 0.5(so double tap to cancel levitate) if you dont want to flying too fast by spamming jump bottun.
 }
 
+local order_maneuver = {
+    "LEVITATE_DURATION", -- default 2.8
+    "RE_LEVITATE_INTERVAL", -- seconds
+    "MAX_ALTITUDE",
+    "MAX_ALTITUDE_DESCEND",
+    "ASCEND_ACCELERATION", -- default 4.0
+    "DESCEND_ACCELERATION", -- opposite of  ASCEND_ACCELERATION
+    "FALL_DEACCELERATE",
+    "MAX_ASCEND_SPEED", -- defalut 5.0 CAUTION: set this value high without setting ASCEND_ACCELERATION very high results slow speed.
+    "MAX_DESCEND_SPEED", -- opposite of MAX_ASCEND_SPEED
+    "FLY_SPEED_MULTIPLIER", -- set 1.0 for default speed
+    "HORIZONTAL_ACCELERATION", -- default 3.0
+    "HORIZONTAL_DEACCELERATION", -- default 3.8
+    "START_FALL_ANIMATION_FRAME_COUNT"
+}
+
 local config_stamina = {
     LEVITATE_STAMINA_MULTIPLIER = 0.0005,
     ASCEND_STAMINA_MULTIPLIER = 3.0,
     DISABLE_STAMINA_COST = false
+}
+
+local order_stamina = {
+    "LEVITATE_STAMINA_MULTIPLIER",
+    "ASCEND_STAMINA_MULTIPLIER"
 }
 
 local config_air_sprint = {
@@ -50,6 +75,12 @@ local config_air_sprint = {
     SPAM_RE_LEVITATE_COOLDOWN = 0.0 -- set 0.0 to disable 
 }
 
+local order_air_sprint = {
+    "AIR_SPRINT_THRESHOLD",
+    "RE_LEVITATE_COST",
+    "COMMON_RATIO"
+}
+
 
 local config_npc = {
     -- NPCs who can levitate seems like only pawns anyway.
@@ -62,22 +93,36 @@ local config_npc = {
     NPC_HORIZONTAL_DEACCELERATION = 3.8, -- default 3.8
 }
 
+local order_npc = {
+    "NPC_LEVITATE_DURATION",
+    "NPC_MAX_ALTITUDE",
+    "NPC_MAX_ASCEND_SPEED",
+    "NPC_ASCEND_ACCELERATION",
+    "PAWN_FLY_SPEED_MULTIPLIER",
+    "NPC_HORIZONTAL_ACCELERATION",
+    "NPC_HORIZONTAL_DEACCELERATION"
+}
+
 
 if reframework.get_commit_count() < 1644 then
 	re.msg("ImmersiveLevitate: Your REFramework is older version.\n If the mod does not work, Get version `REF Nightly 913` from\nhttps://github.com/praydog/REFramework-nightly/releases")
 end
 
-if config_maneuver.RE_LEVITATE_INTERVAL > config_maneuver.LEVITATE_DURATION then
-    config_maneuver.RE_LEVITATE_INTERVAL = config_maneuver.LEVITATE_DURATION
+local function force_init_val()
+    if config_maneuver.RE_LEVITATE_INTERVAL > config_maneuver.LEVITATE_DURATION then
+        config_maneuver.RE_LEVITATE_INTERVAL = config_maneuver.LEVITATE_DURATION
+    end
+    
+    if config_maneuver.DESCEND_ACCELERATION > 0 then
+        config_maneuver.DESCEND_ACCELERATION = config_maneuver.DESCEND_ACCELERATION * -1
+    end
+    
+    if config_maneuver.MAX_DESCEND_SPEED > 0 then
+        config_maneuver.MAX_DESCEND_SPEED = config_maneuver.MAX_DESCEND_SPEED * -1
+    end
 end
 
-if config_maneuver.DESCEND_ACCELERATION > 0 then
-    config_maneuver.DESCEND_ACCELERATION = config_maneuver.DESCEND_ACCELERATION * -1
-end
 
-if config_maneuver.MAX_DESCEND_SPEED > 0 then
-    config_maneuver.MAX_DESCEND_SPEED = config_maneuver.MAX_DESCEND_SPEED * -1
-end
 
 local _block_levitate = false
 
@@ -88,37 +133,6 @@ local state_holder = {
     is_active_fall_guard = false,
     has_init_levitate_param_npc = false
 }
-
-re.on_draw_ui(function ()
-    if imgui.tree_node("Immersive Levitate") then
-        if imgui.button("Save") then
-            --save config_maneuver
-        end
-
-        imgui.text("Stamina")
-        local change, val = imgui.checkbox("DISABLE_STAMINA_COST", config_stamina.DISABLE_STAMINA_COST)
-        if change then
-            config_stamina.DISABLE_STAMINA_COST = val
-        end
-
-        imgui.text("Air Sprint")
-        local change, new_ = imgui.checkbox("COST_ONLY_AIR_SPRINT", config_air_sprint.COST_ONLY_AIR_SPRINT)
-        if change then
-            config_air_sprint.COST_ONLY_AIR_SPRINT = new_
-        end
-
-        local change, new_ = imgui.checkbox("SIMPLIFIED", config_air_sprint.SIMPLIFIED)
-        if change then
-            config_air_sprint.SIMPLIFIED = new_
-        end
-
-        local change, new_ = imgui.checkbox("SAFE_AIR_SPRINT", config_air_sprint.SAFE_AIR_SPRINT)
-        if change then
-            config_air_sprint.SAFE_AIR_SPRINT = new_
-        end
-
-    end
-end)
 
 local levitate_param_player
 local levitate_param_npc = sdk.create_instance("app.LevitateController.Parameter"):add_ref()
@@ -409,8 +423,6 @@ local function set_fall_param()
 end
 
 local args_
-
-
 sdk.hook(sdk.find_type_definition("app.LevitateAction"):get_method("start(via.behaviortree.ActionArg)"),
 function (args)
     args_ = args
@@ -551,9 +563,102 @@ local function init_()
     _free_fall_controller = GetFreeFallController()
     _block_levitate = false
     set_fall_param()
+    force_init_val()
 end
 
+local function create_drag_bars(table_, order_)
+    for _, v in ipairs(order_) do
+        local change, new_
+        if v:match("DURATION") or v:match("INTERVAL") or v:match("AIR_SPRINT_THRESHOLD") then
+            change , new_ = imgui.drag_float(v, table_[v], 0.01, 0.1, 10000, "%.2f sec")
+        elseif v:match("MULTIPLIER") or v:match("COMMON_RATIO") then
+            change , new_ = imgui.drag_float(v, table_[v], 0.01, 0.1, 10000, "%.2fx")
+        elseif table_[v] < 0 then
+            change , new_ = imgui.drag_float(v, table_[v] * -1, 0.01, 0.1, 10000, "%.2f")
+            new_ = new_ * -1
+        else
+            change, new_ = imgui.drag_float(v, table_[v], 0.01, 0.1, 10000, "%.2f")
+        end
+        
+        if change then
+            table_[v] = new_
+            init_()
+        end
+    end
+end
+
+local function save_file(filepath, data)
+    if not json.dump_file(filepath, data) then
+        re.msg("Failed to save " .. filepath)
+    end
+end
+
+
+local function save_config()
+    save_file(MANEUVER_CONFIG_PATH, config_maneuver)
+    save_file(STAMINA_CONFIG_PATH, config_stamina)
+    save_file(AIR_SPRINT_CONFIG_PATH, config_air_sprint)
+    save_file(NPC_CONFIG_PATH, config_npc)
+    re.msg("Saved config to reframework\\data\\ImmersiveLevitate\\")
+end
+
+local function load_config(filepath, table_)
+    local _table = json.load_file(filepath)
+    if not _table then return end
+    for k, v in pairs(_table) do
+        table_[k] = v
+    end
+end
+
+
+load_config(MANEUVER_CONFIG_PATH, config_maneuver)
+load_config(STAMINA_CONFIG_PATH, config_stamina)
+load_config(AIR_SPRINT_CONFIG_PATH, config_air_sprint)
+load_config(NPC_CONFIG_PATH, config_npc)
 init_()
+
+re.on_draw_ui(function ()
+    if imgui.tree_node("Immersive Levitate") then
+        if imgui.button("Save") then
+            save_config()
+        end
+
+        if imgui.tree_node("Maneuver") then
+            create_drag_bars(config_maneuver, order_maneuver)
+        end
+
+        if imgui.tree_node("Stamina") then
+            local change, val = imgui.checkbox("DISABLE_STAMINA_COST", config_stamina.DISABLE_STAMINA_COST)
+            if change then
+                config_stamina.DISABLE_STAMINA_COST = val
+            end
+            create_drag_bars(config_stamina, order_stamina)
+        end
+
+        if imgui.tree_node("Air sprint") then
+            local change, new_ = imgui.checkbox("COST_ONLY_AIR_SPRINT", config_air_sprint.COST_ONLY_AIR_SPRINT)
+            if change then
+                config_air_sprint.COST_ONLY_AIR_SPRINT = new_
+            end
+
+            local change, new_ = imgui.checkbox("SIMPLIFIED", config_air_sprint.SIMPLIFIED)
+            if change then
+                config_air_sprint.SIMPLIFIED = new_
+            end
+
+            local change, new_ = imgui.checkbox("SAFE_AIR_SPRINT", config_air_sprint.SAFE_AIR_SPRINT)
+            if change then
+                config_air_sprint.SAFE_AIR_SPRINT = new_
+            end
+            create_drag_bars(config_air_sprint, order_air_sprint)
+        end
+
+        if imgui.tree_node("Npc") then
+            create_drag_bars(config_npc, order_npc)
+        end
+    end
+end)
+
 
 re.on_script_reset(function ()
     init_()
